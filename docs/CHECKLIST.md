@@ -8,8 +8,10 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [x] Confirm independent set records and online-only v1.
 - [x] Confirm Ubuntu hosting and Tailscale phone access.
 - [x] Confirm pounds only, no bodyweight tracking, private dated plans, and fresh-set/copy numbering.
-- [ ] Resolve dumbbell weight convention, RPE increments, planning time precision, and history/catalog permissions.
-- [ ] Choose Docker Compose or native services; confirm server resources and backup destination.
+- [x] Confirm whole-number RPE, shared catalog with exercise approval, and private app history with separate database-owner access.
+- [x] Choose Docker Compose and admin-managed accounts/recovery without signup or email.
+- [ ] Resolve dumbbell weight convention, planning time precision, and private logging against pending exercises.
+- [ ] Confirm server resources, existing services, and backup destination.
 - [ ] Finalize schema and REST examples against the decisions.
 
 ## 1. Establish the repository
@@ -29,10 +31,11 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Implement the superadmin bootstrap and username/password session login.
 - [ ] Implement account create/disable/reset and password change, with role checks and session revocation.
 - [ ] Implement exercise, set, and planned-exercise endpoints with runtime validation.
+- [ ] Implement exercise submissions and a superadmin approval/rejection queue; restrict pending submissions to their owner and reviewers.
 - [ ] Implement history filters, pagination, duplicate-request protection, and consistent errors.
 - [ ] Publish an OpenAPI contract and usable example requests.
 - [ ] Verify the API can create, retrieve, edit, and delete a set before frontend work.
-- [ ] Test real PostgreSQL persistence, invalid data, retry behavior, authentication, and two-user isolation.
+- [ ] Test real PostgreSQL persistence, integer RPE validation, retry behavior, authentication, exercise approval, and ownership isolation (including superadmin app requests).
 
 ## 3. Deliver the phone workflow
 
@@ -44,6 +47,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Build history filtering and set edit/delete.
 - [ ] Build dated plans with notes, ordering, and a Log set shortcut.
 - [ ] Add minimal password/settings and account administration screens.
+- [ ] Add exercise submission/status and superadmin approval controls.
 - [ ] Check touch targets, labels, keyboard behavior, and layout on the actual phone.
 - [ ] Run one full flow: admin creates family account → user logs in → saves set → reloads → sees history.
 
@@ -51,6 +55,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 
 - [ ] Build the React assets and production API; serve them under one origin.
 - [ ] Configure persistent PostgreSQL storage, secrets, and explicit migration steps.
+- [ ] Separate application database credentials from database operator credentials.
 - [ ] Configure Tailscale HTTPS and access for the required family devices.
 - [ ] Confirm app/database port bindings match the private deployment design.
 - [ ] Enable restart behavior, health checks, and useful logs without credentials/passwords.

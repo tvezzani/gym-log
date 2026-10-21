@@ -4,6 +4,8 @@ A minimalist, self-hosted gym log for a family. Working title; planning stage.
 
 Each workout record is one independent set. Version 1 requires a connection to the Ubuntu server through Tailscale.
 
+Confirmed scope: pounds only, whole-number RPE, private dated plans, shared exercise names with superadmin approval, and admin-managed accounts. Workout history is private through the app; the database owner retains direct database access. Deployment uses Docker Compose.
+
 - [Product requirements](docs/PRD.md)
 - [Build checklist](docs/CHECKLIST.md)
 - [Questions and decisions](docs/QUESTIONS.md)
