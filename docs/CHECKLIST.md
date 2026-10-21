@@ -7,7 +7,8 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [x] Capture the first PRD and clarification questions.
 - [x] Confirm independent set records and online-only v1.
 - [x] Confirm Ubuntu hosting and Tailscale phone access.
-- [ ] Resolve units, set-number reset rules, RPE increments, planning dates, and privacy/catalog permissions.
+- [x] Confirm pounds only, no bodyweight tracking, private dated plans, and fresh-set/copy numbering.
+- [ ] Resolve dumbbell weight convention, RPE increments, planning time precision, and history/catalog permissions.
 - [ ] Choose Docker Compose or native services; confirm server resources and backup destination.
 - [ ] Finalize schema and REST examples against the decisions.
 
@@ -37,7 +38,8 @@ Complete one small, usable stage at a time. Checked items describe setup already
 
 - [ ] Build the login screen and authenticated navigation.
 - [ ] Build today's set list and fast entry form using custom React/SCSS components.
-- [ ] Implement the agreed set-number suggestions/reset and last-value prefills.
+- [ ] Start fresh entries at set 1; add Copy as next set with a new ID/time and an incremented number.
+- [ ] Label all weights in pounds; implement copy prefills and last-value display.
 - [ ] Preserve unsaved values on failed requests; show explicit save status.
 - [ ] Build history filtering and set edit/delete.
 - [ ] Build dated plans with notes, ordering, and a Log set shortcut.

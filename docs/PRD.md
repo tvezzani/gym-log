@@ -10,9 +10,12 @@ Log a lifting set quickly from a phone, see what was just completed, and view up
 
 - A workout record represents one independent set. There is no workout-session entity in v1.
 - Each record has an exercise, time performed with millisecond precision, reps, weight, set number, RPE, and owning user.
+- Fresh entries start at set 1. A UI copy action copies a selected set and increments its set number; there is no automatic per-day numbering.
+- Weight is recorded in pounds only. Bodyweight tracking is outside v1.
 - RPE is between 1 and 10 and defaults to 5.
 - Exercise definitions have an ID and name.
 - Planned exercises reference exercise definitions and include a date/time and free-text notes, displayed as `Barbell squats [3x10]`.
+- Plans are private dated lists, with no recurring routines in v1.
 - Username/password login and a superadmin for user control.
 - Online only in v1; Ubuntu hosting; phone access through Tailscale.
 - Local Git version control. TypeScript/React/Vite/Express/PostgreSQL/SCSS are the preferred stack, subject to final choices.
@@ -20,22 +23,22 @@ Log a lifting set quickly from a phone, see what was just completed, and view up
 ## Proposed first release
 
 1. Log in and land on today's recorded sets, with a prominent Log set action.
-2. Choose an exercise; enter reps and weight; review/edit the suggested set number and RPE; save.
-3. After the server confirms, show the saved row and prepare the next entry with the same exercise, reps, and weight. RPE starts at 5 for each new entry.
+2. Choose an exercise; enter reps and weight in pounds; review/edit set number (initially 1) and RPE (initially 5); save.
+3. After the server confirms, show the saved row. A Copy as next set action opens a new unsaved entry with the same exercise, reps, weight, and RPE, and `setNumber + 1`. Give the copy a new ID and a fresh performed time. Save it explicitly; keep the source record unchanged.
 4. Keep the form intact on failure and make the save state obvious. Refreshing shows persisted sets.
 5. Edit or delete an incorrectly entered set. Allow entering a set performed earlier.
 6. View history by day and filter by exercise. Show the last recorded values for the selected exercise.
 7. Create, order, edit, and delete planned exercise entries. Logging from a plan preselects its exercise; notes remain free text.
 8. Superadmin creates/disables accounts and resets passwords. Users can change their own passwords.
 
-Proposed defaults pending answers: records and plans are private to their owner; one shared exercise catalog; members may add exercises; only superadmin may rename/archive catalog entries. No public signup. Superadmin controls accounts, without a workout-browsing feature for other users.
+Proposed defaults pending answers: recorded sets are private to their owner; one shared exercise catalog; members may add exercises; only superadmin may rename/archive catalog entries. No public signup. Superadmin controls accounts, without a workout-browsing feature for other users. Plan privacy is confirmed.
 
 ## Minimal screens
 
 - **Today:** dated set list, next-set entry form, today's planned exercises.
 - **History:** day navigation, exercise filter, edit/delete actions.
 - **Plan:** dated exercise list with notes and ordering.
-- **Settings:** password and unit/timezone preferences; superadmin account controls.
+- **Settings:** password and timezone preferences; superadmin account controls.
 
 Use large touch targets, numeric keyboards, visible labels, and a clear saved/saving/failed state. Keep the phone keyboard from hiding Save. No dashboards or charts are needed to log a set.
 
@@ -45,19 +48,19 @@ Names below use API camelCase; SQL may use snake_case. IDs are UUIDs. Every fore
 
 | Entity | Fields |
 | --- | --- |
-| User | `id`, `username`, `passwordHash`, `role` (`member` / `superadmin`), `isActive`, `preferredWeightUnit`, `timeZone`, `createdAt` |
+| User | `id`, `username`, `passwordHash`, `role` (`member` / `superadmin`), `isActive`, `timeZone`, `createdAt` |
 | Exercise | `id`, `name`, `archivedAt`, `createdAt` |
-| Workout | `id`, `exerciseId`, `performedAt`, `reps`, `weight`, `weightUnit`, `setNumber`, `rpe`, `userId`, `createdAt`, `updatedAt` |
+| Workout | `id`, `exerciseId`, `performedAt`, `reps`, `weight` (lbs), `setNumber`, `rpe`, `userId`, `createdAt`, `updatedAt` |
 | PlannedExercise | `id`, `exerciseId`, `userId`, `scheduledAt`, `notes`, `sortOrder`, `createdAt`, `updatedAt` |
 | AuthSession | Session identifier/secret representation, `userId`, expiry; stored server-side in PostgreSQL |
 
 Important rules:
 
 - `performedAt` is when the set happened; `createdAt` is when the server stored it. Default performed time to now but allow editing. Use `timestamptz(3)` and ISO 8601 timestamps with an offset or `Z`; render in the chosen user timezone. Milliseconds are precision, not a unique identifier. [PostgreSQL date/time documentation](https://www.postgresql.org/docs/current/datatype-datetime.html).
-- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. Proposed API representation: a decimal string such as `"135.5"`. Preserve the recorded unit on each set even if a preference later changes. Unit choice and dumbbell/bodyweight conventions are open. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
+- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. Proposed API representation: a decimal string such as `"135.5"`. All weights are pounds; label UI inputs and document this in the API. There is no unit selector or bodyweight field. The per-dumbbell versus combined-pair convention remains open. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
 - `reps` and `setNumber` are positive integers; `weight` is nonnegative. Zero-rep attempts and assisted/negative weight are not included unless requested.
 - Proposed `rpe`: integer 1–10, database/API default 5. Ask whether half points are needed. A defaulted 5 is not proof that effort was explicitly rated.
-- Set numbering is a UI aid, not an identity or unique key. Reset behavior is open. The same exercise can have multiple set 1 records in a day. Editing/deleting a record does not silently renumber others.
+- Set numbering is a UI aid, not an identity or unique key. Fresh entries default to 1; copying a selected record defaults to its set number plus 1, independently of calendar days or other records. The same exercise can have multiple set 1 records in a day. Editing/deleting a record does not silently renumber others.
 - `userId` comes from the authenticated session, never from a client-selected owner. Apply ownership checks to every record operation, including referenced resources.
 - Archive exercises in use rather than deleting referenced definitions. Archived names remain visible in history and are excluded from new selections.
 - A planned entry produces no completed sets automatically. Do not parse `3x10` into structured targets in v1. Exact scheduling versus a calendar date is still open.
@@ -100,8 +103,9 @@ Choose Docker Compose versus native systemd after checking server preferences. P
 
 ## Acceptance criteria
 
-- On a phone, a user logs a set, reloads, and sees matching reps, decimal weight/unit, set number, RPE, and performed time.
-- A user records the same exercise twice in one day, including manually resetting to set 1, without data loss or an invented session requirement.
+- On a phone, a user logs a set, reloads, and sees matching reps, decimal weight in pounds, set number, RPE, and performed time.
+- A fresh entry defaults to set 1. Copying a saved set 3 prefills a new set 4 with matching exercise, reps, weight, and RPE; it has a new ID/time, is saved separately, and leaves the source unchanged.
+- A user creates multiple fresh entries for the same exercise in one day, each starting at set 1, without data loss or a session requirement.
 - RPE omitted on create becomes 5; out-of-range RPE and invalid numbers are rejected by both API and database constraints.
 - A timed-out create can be retried without creating an additional set.
 - A second user cannot read, change, or delete another user's records/plans, including by guessing IDs. Members cannot use admin endpoints.
@@ -111,4 +115,4 @@ Choose Docker Compose versus native systemd after checking server preferences. P
 
 ## Deferred scope
 
-Offline storage/sync, native mobile apps, recurring programs, automatic parsing of plan notes, social feeds, wearables, rest timers, progress charts, and email recovery. These can be reconsidered after the basic logging flow is used at the gym.
+Offline storage/sync, native mobile apps, recurring programs, bodyweight tracking, kilogram support, automatic parsing of plan notes, social feeds, wearables, rest timers, progress charts, and email recovery. These can be reconsidered after the basic logging flow is used at the gym.
