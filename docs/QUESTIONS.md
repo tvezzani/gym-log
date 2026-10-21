@@ -18,21 +18,20 @@
 | History privacy | Private through app/API, including superadmin; database owner retains direct access to everything |
 | Deployment | Docker Compose on Ubuntu |
 | Accounts/recovery | Admin-created accounts and admin-assisted password reset; no signup/email features |
+| Pending exercises | Submitter can log privately while pending; shared selection requires approval |
+| Dumbbells | User's convention; preserve entered pounds without interpreting individual versus combined weight |
+| Plan scheduling | Calendar date only; SQL `date` / API `YYYY-MM-DD`; no scheduled time |
 
-## Highest-impact questions
+## Remaining implementation details
 
-1. **Pending exercises:** can the submitter log against a pending exercise privately, or is approval required before any logging? Shared availability always requires approval.
-2. **Dumbbells:** enter the weight of one dumbbell or the combined pair? Should this be a consistent user convention or shown as an exercise-specific hint?
-3. **Plans:** is the calendar date enough, or does an exact scheduled time matter? Should entries be manually marked done/skipped?
+The core MVP scope is sufficiently defined for scaffolding. The items below can use documented defaults or be resolved when their implementation begins.
 
-## Product details to settle before implementation
-
-4. **Server details:** existing PostgreSQL or reverse proxy? Approximate RAM and backup location?
-5. **Exercise maintenance:** proposed superadmin-only rename/archive. Is that sufficient? Do rejected submissions need a visible reason?
-6. **Logging scope:** only rep/weight strength sets? Need zero-rep failed attempts, warmup markers, timed holds, or cardio in the first version?
-7. **Phone flow:** pick an exercise and keep logging, or start from today's plan? Need a previous-values shortcut? Which phone/browser is the target?
-8. **Login:** how long should a phone stay logged in, and must temporary passwords be changed immediately?
-9. **Time and history:** use a fixed user timezone or follow the phone while traveling? Is editing older sets important? Is a day/exercise list sufficient for history?
-10. **Priorities:** if only three features could ship first, which are essential? Would a rest timer or copy-previous-day action displace something already in the PRD?
+1. **Server details:** existing PostgreSQL or reverse proxy? Approximate RAM and backup location?
+2. **Exercise maintenance:** proposed superadmin-only rename/archive. Proposed rejection behavior preserves history and blocks new entries against the rejected name. Do rejected submissions need a visible reason?
+3. **Logging scope:** proposed positive-rep strength sets only. Need zero-rep failed attempts, warmup markers, timed holds, or cardio later?
+4. **Phone flow:** proposed Today screen supports direct entry and logging from a plan. Which phone/browser should be used for final checks?
+5. **Login:** how long should a phone stay logged in, and must temporary passwords be changed immediately?
+6. **Time and history:** user timezone for performed timestamps; calendar dates for plans. Should workout-day grouping follow the phone while traveling? Proposed history supports day/exercise filtering and editing older sets.
+7. **Plan completion:** no automatic completed sets. Is a manual done/skipped marker needed later?
 
 Unanswered items in the PRD are explicitly proposals. Keep this document updated as answers arrive; avoid turning suggestions into confirmed requirements.

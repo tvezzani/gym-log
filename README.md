@@ -6,6 +6,8 @@ Each workout record is one independent set. Version 1 requires a connection to t
 
 Confirmed scope: pounds only, whole-number RPE, private dated plans, shared exercise names with superadmin approval, and admin-managed accounts. Workout history is private through the app; the database owner retains direct database access. Deployment uses Docker Compose.
 
+Members can log privately against their own pending exercise submissions. Plans use calendar dates without scheduled times. Dumbbell weights follow each user's convention.
+
 - [Product requirements](docs/PRD.md)
 - [Build checklist](docs/CHECKLIST.md)
 - [Questions and decisions](docs/QUESTIONS.md)

@@ -12,9 +12,11 @@ Log a lifting set quickly from a phone, see what was just completed, and view up
 - Each record has an exercise, time performed with millisecond precision, reps, weight, set number, RPE, and owning user.
 - Fresh entries start at set 1. A UI copy action copies a selected set and increments its set number; there is no automatic per-day numbering.
 - Weight is recorded in pounds only. Bodyweight tracking is outside v1.
+- Dumbbell weight follows the user's own convention; the app does not interpret or convert between per-dumbbell and combined-pair values.
 - RPE uses whole numbers between 1 and 10 and defaults to 5.
 - Exercise definitions have an ID and name. The family shares one catalog; new exercises require superadmin approval.
-- Planned exercises reference exercise definitions and include a date/time and free-text notes, displayed as `Barbell squats [3x10]`.
+- An exercise's submitter may log sets privately while it is pending approval. Other members cannot select that pending exercise.
+- Planned exercises reference exercise definitions and include a calendar date and free-text notes, displayed as `Barbell squats [3x10]`. No exact scheduled time is needed.
 - Plans are private dated lists, with no recurring routines in v1.
 - Username/password login and a superadmin for user control.
 - Superadmin creates accounts and assists with password resets; no public signup or email recovery in v1.
@@ -33,11 +35,11 @@ Log a lifting set quickly from a phone, see what was just completed, and view up
 6. View history by day and filter by exercise. Show the last recorded values for the selected exercise.
 7. Create, order, edit, and delete planned exercise entries. Logging from a plan preselects its exercise; notes remain free text.
 8. Superadmin creates/disables accounts and resets passwords. Users can change their own passwords.
-9. Members submit exercise names for approval. Superadmin reviews pending submissions and approves or rejects them; approved names join the shared catalog.
+9. Members submit exercise names and may immediately log sets against their own pending exercises. Superadmin reviews pending submissions and approves or rejects them; approved names join the shared catalog. Approval changes catalog visibility, while existing sets remain private.
 
 Confirmed access rules: records and plans are private to their owner through the app/API. The superadmin role manages accounts and exercise approvals; it does not bypass record ownership checks. Direct database administration uses separate operator credentials and may access every user's records. Do not give those credentials to the browser or use them as application login credentials.
 
-Proposed catalog management rule: only superadmin may rename/archive catalog entries. Open decision: whether a submitter may log against a pending exercise privately while waiting for approval. Approval is required before an exercise becomes selectable by other family members.
+Proposed catalog management rule: only superadmin may rename/archive catalog entries. A submitter may log against their pending exercise privately; approval is required before it becomes selectable by other family members. Proposed rejection behavior: preserve existing sets and their exercise reference, show the rejected status to the submitter, and exclude the rejected exercise from new entries. Rejection must not delete previously logged sets.
 
 ## Minimal screens
 
@@ -57,21 +59,23 @@ Names below use API camelCase; SQL may use snake_case. IDs are UUIDs. Every fore
 | User | `id`, `username`, `passwordHash`, `role` (`member` / `superadmin`), `isActive`, `timeZone`, `createdAt` |
 | Exercise | `id`, `name`, `status` (`pending` / `approved` / `rejected`), `submittedBy`, `reviewedBy`, `reviewedAt`, `archivedAt`, `createdAt` |
 | Workout | `id`, `exerciseId`, `performedAt`, `reps`, `weight` (lbs), `setNumber`, `rpe`, `userId`, `createdAt`, `updatedAt` |
-| PlannedExercise | `id`, `exerciseId`, `userId`, `scheduledAt`, `notes`, `sortOrder`, `createdAt`, `updatedAt` |
+| PlannedExercise | `id`, `exerciseId`, `userId`, `plannedDate`, `notes`, `sortOrder`, `createdAt`, `updatedAt` |
 | AuthSession | Session identifier/secret representation, `userId`, expiry; stored server-side in PostgreSQL |
 
 Important rules:
 
 - `performedAt` is when the set happened; `createdAt` is when the server stored it. Default performed time to now but allow editing. Use `timestamptz(3)` and ISO 8601 timestamps with an offset or `Z`; render in the chosen user timezone. Milliseconds are precision, not a unique identifier. [PostgreSQL date/time documentation](https://www.postgresql.org/docs/current/datatype-datetime.html).
-- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. Proposed API representation: a decimal string such as `"135.5"`. All weights are pounds; label UI inputs and document this in the API. There is no unit selector or bodyweight field. The per-dumbbell versus combined-pair convention remains open. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
+- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. Proposed API representation: a decimal string such as `"135.5"`. All weights are pounds; label UI inputs and document this in the API. There is no unit selector or bodyweight field. Preserve dumbbell weights exactly as entered, without interpreting them as individual or combined values. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
 - `reps` and `setNumber` are positive integers; `weight` is nonnegative. Zero-rep attempts and assisted/negative weight are not included unless requested.
 - `rpe`: integer 1–10, database/API default 5. Reject fractional values. A defaulted 5 is not proof that effort was explicitly rated.
 - Set numbering is a UI aid, not an identity or unique key. Fresh entries default to 1; copying a selected record defaults to its set number plus 1, independently of calendar days or other records. The same exercise can have multiple set 1 records in a day. Editing/deleting a record does not silently renumber others.
 - `userId` comes from the authenticated session, never from a client-selected owner. Apply ownership checks to every record operation, including referenced resources.
 - Archive exercises in use rather than deleting referenced definitions. Archived names remain visible in history and are excluded from new selections.
-- Exercise submissions start pending. Approval/rejection is superadmin-only and records the reviewer and time. Members see approved catalog entries plus their own submissions; superadmin may inspect the full approval queue. Pending/rejected submissions never appear in other members' exercise selections. Whether the submitter can use a pending entry is still open.
-- A planned entry produces no completed sets automatically. Do not parse `3x10` into structured targets in v1. Exact scheduling versus a calendar date is still open.
-- Index workout history by `(userId, performedAt)` and `(userId, exerciseId, performedAt)`; plans by `(userId, scheduledAt, sortOrder)`.
+- Exercise submissions start pending. Approval/rejection is superadmin-only and records the reviewer and time. Members see approved catalog entries plus their own submissions; superadmin may inspect the full approval queue. New sets may reference an approved, unarchived exercise or an unarchived pending exercise submitted by the authenticated user. Knowing another user's pending exercise ID does not permit logging against it. Pending/rejected submissions never appear in other members' exercise selections.
+- Approval keeps the exercise ID stable, so existing private sets need no migration. Rejection or archival must preserve existing history and foreign-key references.
+- Store `plannedDate` as SQL `date`, with an API string in `YYYY-MM-DD` format. Validate a real calendar date and keep it as a date in the frontend; do not convert it through UTC midnight. Traveling or changing a timezone must not shift the intended plan date.
+- A planned entry produces no completed sets automatically. Do not parse `3x10` into structured targets in v1.
+- Index workout history by `(userId, performedAt)` and `(userId, exerciseId, performedAt)`; plans by `(userId, plannedDate, sortOrder)`.
 
 ## REST outline
 
@@ -80,14 +84,14 @@ Base path: `/api/v1`. The API is developed and documented before the UI.
 | Area | Endpoints |
 | --- | --- |
 | Authentication | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `PATCH /auth/password` |
-| Exercises | `GET /exercises` (approved shared catalog), `POST /exercises` (submit pending name), `GET /exercise-submissions` (own submissions), `PATCH /exercises/:id` (superadmin rename/archive) |
+| Exercises | `GET /exercises` (approved shared catalog), `POST /exercises` (submit pending name), `GET /exercise-submissions` (own submissions; include own pending exercises in the logging picker), `PATCH /exercises/:id` (superadmin rename/archive) |
 | Exercise approval | `GET /admin/exercises?status=pending`, `POST /admin/exercises/:id/approve`, `POST /admin/exercises/:id/reject` |
 | Sets | `GET /workouts`, `POST /workouts`, `GET /workouts/:id`, `PATCH /workouts/:id`, `DELETE /workouts/:id` |
 | Plans | `GET /planned-exercises`, `POST /planned-exercises`, `PATCH /planned-exercises/:id`, `DELETE /planned-exercises/:id` |
 | Account administration | `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/:id`, `POST /admin/users/:id/reset-password` |
 | Operations | `GET /health` (minimal public status), internal readiness check including the database |
 
-List endpoints support bounded pagination and time/exercise filters. Filter timestamps use a start-inclusive/end-exclusive interval calculated for the user's selected day. Validate input at runtime and return consistent field errors. Document request/response schemas in OpenAPI.
+List endpoints support bounded pagination and exercise filters. Workout history accepts timestamp ranges using a start-inclusive/end-exclusive interval calculated for the user's selected day. Plans accept calendar-date filters matching `plannedDate`, without timezone conversion. Validate input at runtime and return consistent field errors. Document request/response schemas in OpenAPI.
 
 Prevent accidental duplicate saves: generate a set UUID once per submission; safely retry the identical create request with the same ID, and reject conflicting reuse. Disable Save while pending. This is request retry protection, not offline synchronization.
 
@@ -118,7 +122,9 @@ Use Docker Compose for the app and PostgreSQL on Ubuntu, with Tailscale on the h
 - A timed-out create can be retried without creating an additional set.
 - A second user cannot read, change, or delete another user's records/plans, including by guessing IDs. Superadmin app/API requests obey the same ownership rules. Members cannot use admin endpoints; separate database operator access remains available outside the app.
 - A member's new exercise remains outside the shared catalog until superadmin approves it; rejection keeps it out. Members cannot approve their own submissions or inspect others' pending submissions.
+- The submitter can record and retrieve sets against their pending exercise. A different member cannot use that pending exercise ID. After approval, the exercise becomes shared but its previously logged sets remain private; rejection preserves existing sets.
 - A plan displays `Barbell squats [3x10]` and stays distinct from recorded sets.
+- A plan saved for `2026-10-21` remains on that date after reload or a timezone change; it has no scheduled time input.
 - Disabling an account invalidates its active sessions; the last superadmin remains recoverable.
 - The app works over phone cellular data with Tailscale connected, survives a server restart, and restores historical records from a tested backup.
 

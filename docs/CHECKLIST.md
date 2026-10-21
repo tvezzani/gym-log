@@ -10,7 +10,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [x] Confirm pounds only, no bodyweight tracking, private dated plans, and fresh-set/copy numbering.
 - [x] Confirm whole-number RPE, shared catalog with exercise approval, and private app history with separate database-owner access.
 - [x] Choose Docker Compose and admin-managed accounts/recovery without signup or email.
-- [ ] Resolve dumbbell weight convention, planning time precision, and private logging against pending exercises.
+- [x] Confirm user-defined dumbbell convention, calendar-date plans, and private logging against own pending exercises.
 - [ ] Confirm server resources, existing services, and backup destination.
 - [ ] Finalize schema and REST examples against the decisions.
 
@@ -32,6 +32,8 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Implement account create/disable/reset and password change, with role checks and session revocation.
 - [ ] Implement exercise, set, and planned-exercise endpoints with runtime validation.
 - [ ] Implement exercise submissions and a superadmin approval/rejection queue; restrict pending submissions to their owner and reviewers.
+- [ ] Allow logging against own pending exercises; block use of another member's pending exercise and preserve history through review decisions.
+- [ ] Use SQL `date` and `YYYY-MM-DD` strings for plans, with date validation and no timezone conversion.
 - [ ] Implement history filters, pagination, duplicate-request protection, and consistent errors.
 - [ ] Publish an OpenAPI contract and usable example requests.
 - [ ] Verify the API can create, retrieve, edit, and delete a set before frontend work.
@@ -45,7 +47,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Label all weights in pounds; implement copy prefills and last-value display.
 - [ ] Preserve unsaved values on failed requests; show explicit save status.
 - [ ] Build history filtering and set edit/delete.
-- [ ] Build dated plans with notes, ordering, and a Log set shortcut.
+- [ ] Build calendar-date plans with notes, ordering, and a Log set shortcut; verify dates do not shift with timezones.
 - [ ] Add minimal password/settings and account administration screens.
 - [ ] Add exercise submission/status and superadmin approval controls.
 - [ ] Check touch targets, labels, keyboard behavior, and layout on the actual phone.
