@@ -1,0 +1,52 @@
+{
+  "name": "gym-log",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "setup:env": "node scripts/setup-env.mjs",
+    "dev": "npm run build -w @gym-log/contracts && node --env-file=.env --import tsx --watch apps/api/src/server.ts",
+    "build": "tsc -b",
+    "start": "node --env-file=.env apps/api/dist/server.js",
+    "typecheck": "tsc -p packages/contracts --noEmit && tsc -p apps/api --noEmit && tsc -p tsconfig.tests.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --import tsx --test apps/api/test/app.test.ts packages/contracts/test/*.test.ts",
+    "check": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm test && npm run docs:check",
+    "db:up": "sudo docker compose --env-file .env -f infra/compose.dev.yaml up -d --wait",
+    "db:stop": "sudo docker compose --env-file .env -f infra/compose.dev.yaml stop",
+    "db:logs": "sudo docker compose --env-file .env -f infra/compose.dev.yaml logs postgres",
+    "db:migrate": "node --env-file=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js --database-url-var MIGRATION_DATABASE_URL --migrations-dir db/migrations up",
+    "db:check": "node --env-file=.env --import tsx apps/api/src/readiness.ts",
+    "test:db": "node --env-file=.env --import tsx --test --test-concurrency=1 apps/api/test/database.integration.test.ts apps/api/test/schema.integration.test.ts",
+    "docs:generate": "npm run build -w @gym-log/contracts && node scripts/generate-openapi.mjs",
+    "docs:check": "node scripts/generate-openapi.mjs --check",
+    "db:fixtures": "npm run build -w @gym-log/contracts && node --env-file=.env scripts/seed-development.mjs"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0",
+    "@eslint/js": "10.0.1",
+    "@types/express": "5.0.6",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "node-pg-migrate": "9.0.0",
+    "prettier": "3.9.10",
+    "supertest": "7.3.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0",
+    "yaml": "2.9.1"
+  },
+  "packageManager": "npm@11.19.1"
+}

@@ -39,7 +39,7 @@ Log a lifting set quickly from a phone, see what was just completed, and view up
 
 Confirmed access rules: records and plans are private to their owner through the app/API. The superadmin role manages accounts and exercise approvals; it does not bypass record ownership checks. Direct database administration uses separate operator credentials and may access every user's records. Do not give those credentials to the browser or use them as application login credentials.
 
-Proposed catalog management rule: only superadmin may rename/archive catalog entries. A submitter may log against their pending exercise privately; approval is required before it becomes selectable by other family members. Proposed rejection behavior: preserve existing sets and their exercise reference, show the rejected status to the submitter, and exclude the rejected exercise from new entries. Rejection must not delete previously logged sets.
+Confirmed catalog management rule: only superadmin may rename/archive catalog entries. A submitter may log against their pending exercise privately; approval is required before it becomes selectable by other family members. Confirmed rejection behavior: preserve existing sets and their exercise reference, show the rejected status to the submitter, and exclude the rejected exercise from new entries. Rejection must not delete previously logged sets.
 
 ## Minimal screens
 
@@ -54,18 +54,18 @@ Use large touch targets, numeric keyboards, visible labels, and a clear saved/sa
 
 Names below use API camelCase; SQL may use snake_case. IDs are UUIDs. Every foreign key is enforced by the database.
 
-| Entity | Fields |
-| --- | --- |
-| User | `id`, `username`, `passwordHash`, `role` (`member` / `superadmin`), `isActive`, `timeZone`, `createdAt` |
-| Exercise | `id`, `name`, `status` (`pending` / `approved` / `rejected`), `submittedBy`, `reviewedBy`, `reviewedAt`, `archivedAt`, `createdAt` |
-| Workout | `id`, `exerciseId`, `performedAt`, `reps`, `weight` (lbs), `setNumber`, `rpe`, `userId`, `createdAt`, `updatedAt` |
-| PlannedExercise | `id`, `exerciseId`, `userId`, `plannedDate`, `notes`, `sortOrder`, `createdAt`, `updatedAt` |
-| AuthSession | Session identifier/secret representation, `userId`, expiry; stored server-side in PostgreSQL |
+| Entity          | Fields                                                                                                                             |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| User            | `id`, `username`, `passwordHash`, `role` (`member` / `superadmin`), `isActive`, `timeZone`, `createdAt`, `updatedAt`               |
+| Exercise        | `id`, `name`, `status` (`pending` / `approved` / `rejected`), `submittedBy`, `reviewedBy`, `reviewedAt`, `archivedAt`, `createdAt` |
+| Workout         | `id`, `exerciseId`, `performedAt`, `reps`, `weight` (lbs), `setNumber`, `rpe`, `userId`, `createdAt`, `updatedAt`                  |
+| PlannedExercise | `id`, `exerciseId`, `userId`, `plannedDate`, `notes`, `sortOrder`, `createdAt`, `updatedAt`                                        |
+| AuthSession     | Session identifier/secret representation, `userId`, expiry; stored server-side in PostgreSQL                                       |
 
 Important rules:
 
 - `performedAt` is when the set happened; `createdAt` is when the server stored it. Default performed time to now but allow editing. Use `timestamptz(3)` and ISO 8601 timestamps with an offset or `Z`; render in the chosen user timezone. Milliseconds are precision, not a unique identifier. [PostgreSQL date/time documentation](https://www.postgresql.org/docs/current/datatype-datetime.html).
-- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. Proposed API representation: a decimal string such as `"135.5"`. All weights are pounds; label UI inputs and document this in the API. There is no unit selector or bodyweight field. Preserve dumbbell weights exactly as entered, without interpreting them as individual or combined values. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
+- Use `numeric(8,3)` for weight, rather than an inexact float; reject excess decimal places at the API. API representation: a decimal string such as `"135.5"`. All weights are pounds; label UI inputs and document this in the API. There is no unit selector or bodyweight field. Preserve dumbbell weights exactly as entered, without interpreting them as individual or combined values. [PostgreSQL numeric documentation](https://www.postgresql.org/docs/current/datatype-numeric.html).
 - `reps` and `setNumber` are positive integers; `weight` is nonnegative. Zero-rep attempts and assisted/negative weight are not included unless requested.
 - `rpe`: integer 1–10, database/API default 5. Reject fractional values. A defaulted 5 is not proof that effort was explicitly rated.
 - Set numbering is a UI aid, not an identity or unique key. Fresh entries default to 1; copying a selected record defaults to its set number plus 1, independently of calendar days or other records. The same exercise can have multiple set 1 records in a day. Editing/deleting a record does not silently renumber others.
@@ -81,15 +81,15 @@ Important rules:
 
 Base path: `/api/v1`. The API is developed and documented before the UI.
 
-| Area | Endpoints |
-| --- | --- |
-| Authentication | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `PATCH /auth/password` |
-| Exercises | `GET /exercises` (approved shared catalog), `POST /exercises` (submit pending name), `GET /exercise-submissions` (own submissions; include own pending exercises in the logging picker), `PATCH /exercises/:id` (superadmin rename/archive) |
-| Exercise approval | `GET /admin/exercises?status=pending`, `POST /admin/exercises/:id/approve`, `POST /admin/exercises/:id/reject` |
-| Sets | `GET /workouts`, `POST /workouts`, `GET /workouts/:id`, `PATCH /workouts/:id`, `DELETE /workouts/:id` |
-| Plans | `GET /planned-exercises`, `POST /planned-exercises`, `PATCH /planned-exercises/:id`, `DELETE /planned-exercises/:id` |
-| Account administration | `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/:id`, `POST /admin/users/:id/reset-password` |
-| Operations | `GET /health` (minimal public status), internal readiness check including the database |
+| Area                   | Endpoints                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication         | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `PATCH /auth/password`                                                                                                                                                             |
+| Exercises              | `GET /exercises` (approved shared catalog), `POST /exercises` (submit pending name), `GET /exercise-submissions` (own submissions; include own pending exercises in the logging picker), `PATCH /exercises/:id` (superadmin rename/archive) |
+| Exercise approval      | `GET /admin/exercises?status=pending`, `POST /admin/exercises/:id/approve`, `POST /admin/exercises/:id/reject`                                                                                                                              |
+| Sets                   | `GET /workouts`, `POST /workouts`, `GET /workouts/:id`, `PATCH /workouts/:id`, `DELETE /workouts/:id`                                                                                                                                       |
+| Plans                  | `GET /planned-exercises`, `POST /planned-exercises`, `PATCH /planned-exercises/:id`, `DELETE /planned-exercises/:id`                                                                                                                        |
+| Account administration | `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/:id`, `POST /admin/users/:id/reset-password`                                                                                                                                   |
+| Operations             | `GET /health` (minimal public status), internal readiness check including the database                                                                                                                                                      |
 
 List endpoints support bounded pagination and exercise filters. Workout history accepts timestamp ranges using a start-inclusive/end-exclusive interval calculated for the user's selected day. Plans accept calendar-date filters matching `plannedDate`, without timezone conversion. Validate input at runtime and return consistent field errors. Document request/response schemas in OpenAPI.
 
@@ -131,3 +131,13 @@ Use Docker Compose for the app and PostgreSQL on Ubuntu, with Tailscale on the h
 ## Deferred scope
 
 Offline storage/sync, native mobile apps, recurring programs, bodyweight tracking, kilogram support, automatic parsing of plan notes, social feeds, wearables, rest timers, progress charts, and email recovery. These can be reconsidered after the basic logging flow is used at the gym.
+
+## Milestone 2 contract decisions
+
+The generated `openapi.yaml`, `API-RULES.md`, and `API-EXAMPLES.md` now define the persistence/REST details. Admin-only rename/archive is confirmed. New plans follow set exercise eligibility; rejected/archived references remain readable and may be retained during edits, but are unavailable for new selection. Renaming reflects the current name through the same exercise ID, including history.
+
+Add `GET /auth/csrf`, `PATCH /preferences`, and atomic `PUT /planned-exercises/order` to the REST outline above. Usernames are canonical lowercase ASCII, 3–32 characters; new/reset passwords are 12–128 characters. Initial user timezone is explicitly supplied and never changes automatically while traveling. Weights are decimal strings; performed instants require an offset/Z and exactly three fractional digits. Pagination uses bounded limit/offset with deterministic ID tie-breakers.
+
+The SQL schema additionally retains immutable workout-create identities (UUID, owner, normalized request hash, server creation time) independently of sets. This supports safe retries after edits/deletion; deleted set values are not retained in that ledger. Identical retries return the current row, or 410 if deleted. Different payload/owner reuse returns generic 409. See API-RULES.md for transactional handling.
+
+These are contract/schema decisions, not completed endpoint implementation. Authentication/session lifetime and forced-change policy remain milestone 3; ownership and concurrency API evidence remains the milestone 4 gate.

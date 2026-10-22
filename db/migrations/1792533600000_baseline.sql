@@ -1,0 +1,9 @@
+-- Up Migration
+CREATE SCHEMA app;
+GRANT USAGE ON SCHEMA app TO gym_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO gym_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO gym_app;
+
+-- Down Migration
+-- Preserve data. Recovery is documented in db/migrations/README.md.
+SELECT 1;

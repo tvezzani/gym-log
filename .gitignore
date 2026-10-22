@@ -11,3 +11,5 @@ backups/
 *.sql.gz
 .DS_Store
 Thumbs.db
+
+*.tsbuildinfo

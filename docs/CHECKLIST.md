@@ -12,30 +12,33 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [x] Choose Docker Compose and admin-managed accounts/recovery without signup or email.
 - [x] Confirm user-defined dumbbell convention, calendar-date plans, and private logging against own pending exercises.
 - [ ] Confirm server resources, existing services, and backup destination.
-- [ ] Finalize schema and REST examples against the decisions.
+- [x] Finalize schema and REST examples against the decisions.
 
 ## 1. Establish the repository
 
 - [x] Initialize local Git on the `main` branch.
 - [ ] Add the repository folder as a Codex project if desired.
-- [ ] Verify WSL access; use one chosen development checkout.
-- [ ] Scaffold npm workspaces: `apps/api`, `apps/web`, `packages/contracts`.
-- [ ] Pin a supported Node release and package versions; commit a lockfile.
-- [ ] Add environment variable examples, ignored secrets, formatter/linter, and type checks.
-- [ ] Provide a documented command to start the API, frontend, and development database.
+- [x] Verify WSL access; use one chosen development checkout.
+- [x] Scaffold npm workspaces: `apps/api`, `apps/web`, `packages/contracts`.
+- [x] Pin a supported Node release and package versions; generate a lockfile.
+- [x] Review and commit the scaffold and lockfile.
+- [x] Add environment variable examples, ignored secrets, formatter/linter, and type checks.
+- [x] Document API/database startup commands; reserve frontend startup for its implementation milestone.
+
+- [x] Verify baseline build/lint/types/tests, real PostgreSQL permissions, migration reruns, and both API startup commands.
 
 ## 2. Deliver the API first
 
-- [ ] Write migrations for users, exercises, independent workout records, planned exercises, and auth sessions.
-- [ ] Add constraints, ownership indexes, and deterministic migration/seed commands.
+- [x] Write migrations for users, exercises, independent workout records, planned exercises, and auth sessions.
+- [x] Add constraints, ownership indexes, and deterministic migration/seed commands.
 - [ ] Implement the superadmin bootstrap and username/password session login.
 - [ ] Implement account create/disable/reset and password change, with role checks and session revocation.
 - [ ] Implement exercise, set, and planned-exercise endpoints with runtime validation.
 - [ ] Implement exercise submissions and a superadmin approval/rejection queue; restrict pending submissions to their owner and reviewers.
 - [ ] Allow logging against own pending exercises; block use of another member's pending exercise and preserve history through review decisions.
-- [ ] Use SQL `date` and `YYYY-MM-DD` strings for plans, with date validation and no timezone conversion.
+- [x] Define/test SQL `date` and `YYYY-MM-DD` contracts for plans, with date validation and no timezone conversion.
 - [ ] Implement history filters, pagination, duplicate-request protection, and consistent errors.
-- [ ] Publish an OpenAPI contract and usable example requests.
+- [x] Publish an OpenAPI contract and usable example requests (planned feature routes; health implemented).
 - [ ] Verify the API can create, retrieve, edit, and delete a set before frontend work.
 - [ ] Test real PostgreSQL persistence, integer RPE validation, retry behavior, authentication, exercise approval, and ownership isolation (including superadmin app requests).
 

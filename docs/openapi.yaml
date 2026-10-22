@@ -1,0 +1,3981 @@
+openapi: 3.1.0
+info:
+  title: Gym Log API
+  version: 0.1.0
+  description: Milestone 2 contract. Only health is implemented so far; feature endpoints follow in milestones 3–4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.
+servers:
+  - url: /api/v1
+tags:
+  - name: Operations
+  - name: Authentication
+  - name: Accounts
+  - name: Exercises
+  - name: Sets
+  - name: Plans
+  - name: Administration
+paths:
+  /health:
+    get:
+      operationId: health
+      tags:
+        - Operations
+      summary: Minimal process liveness
+      description: Implemented. No database details. Internal readiness uses npm run db:check.
+      security: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+  /auth/csrf:
+    get:
+      operationId: getCsrf
+      tags:
+        - Authentication
+      summary: Obtain a CSRF token
+      description: 'Planned. Sets an opaque signed pre-login context cookie when unauthenticated; after login returns the session CSRF token. Same-origin only; Cache-Control: no-store.'
+      security: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Csrf'
+              example:
+                csrfToken: ccccccccccccccccccccccccccccccccccccccccccc
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: RATE_LIMITED
+                  message: Rate limit exceeded
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+  /auth/login:
+    post:
+      operationId: login
+      tags:
+        - Authentication
+      summary: Log in and rotate the opaque session
+      description: Planned. Requires the pre-login CSRF cookie/token and same-origin check. Canonical lowercase username; password is untouched. Sets the HttpOnly session cookie; returns no session secret or hash. Session lifetime and reset policy are settled before milestone 3.
+      security:
+        - csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth'
+              example: &a1
+                user: &a3
+                  id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                  username: alex
+                  role: member
+                  isActive: true
+                  timeZone: America/Denver
+                  createdAt: 2026-10-21T18:34:56.123Z
+                  updatedAt: 2026-10-21T18:34:56.123Z
+                csrfToken: ccccccccccccccccccccccccccccccccccccccccccc
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Invalid username/password or disabled account; use one generic message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Invalid username/password or disabled account; use one generic message
+        '403':
+          description: Invalid CSRF context or origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Invalid CSRF context or origin
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: &a2
+                error:
+                  code: VALIDATION_ERROR
+                  message: Invalid request
+                  fieldErrors:
+                    - path: weight
+                      message: Use a decimal string with at most three decimal places
+        '429':
+          description: Login rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: RATE_LIMITED
+                  message: Login rate limit exceeded
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+            example:
+              username: alex
+              password: Example-only-long-password!
+  /auth/logout:
+    post:
+      operationId: logout
+      tags:
+        - Authentication
+      summary: Revoke the current session and clear its cookie
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+  /auth/me:
+    get:
+      operationId: me
+      tags:
+        - Authentication
+      summary: Read own account and CSRF token
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth'
+              example: *a1
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+  /auth/password:
+    patch:
+      operationId: changePassword
+      tags:
+        - Authentication
+      summary: Change own password and revoke existing sessions
+      description: Planned. Verify current password; revoke all own sessions including the current one. The caller logs in again. No password/hash is returned.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+            example:
+              currentPassword: Example-only-long-password!
+              newPassword: Another-example-password!
+  /preferences:
+    patch:
+      operationId: updatePreferences
+      tags:
+        - Accounts
+      summary: Change own explicit history timezone
+      description: Planned. A stored IANA timezone groups performed instants. Plans remain unchanged calendar dates. Never follow phone timezone changes automatically.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example: *a3
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencesPatch'
+            example:
+              timeZone: UTC
+  /exercises:
+    get:
+      operationId: listExercises
+      tags:
+        - Exercises
+      summary: List approved, unarchived shared exercises
+      description: Planned. Shared across authenticated family accounts only. Order lower(name) ASC, id ASC. Names need not be unique. This never includes other members’ pending or rejected exercises.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseList'
+              example:
+                items:
+                  - &a9
+                    id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                    name: Barbell squat
+                    status: approved
+                    submittedBy: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                    reviewedBy: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0005
+                    reviewedAt: 2026-10-21T18:34:56.123Z
+                    archivedAt: null
+                    createdAt: 2026-10-21T18:34:56.123Z
+                    updatedAt: 2026-10-21T18:34:56.123Z
+                pagination: &a5
+                  limit: 50
+                  offset: 0
+                  hasMore: false
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - &a6
+          name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum returned items
+        - &a7
+          name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+          description: Items to skip in deterministic ordering; no snapshot guarantee across concurrent writes
+    post:
+      operationId: submitExercise
+      tags:
+        - Exercises
+      summary: Submit a private pending exercise
+      description: Planned. submittedBy is the session user. The submitter may use it privately while pending. Approval shares only the exercise; sets/plans remain private.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+              example: &a4
+                id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                name: Barbell squat
+                status: pending
+                submittedBy: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                reviewedBy: null
+                reviewedAt: null
+                archivedAt: null
+                createdAt: 2026-10-21T18:34:56.123Z
+                updatedAt: 2026-10-21T18:34:56.123Z
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseCreate'
+            example:
+              name: Barbell squat
+  /exercise-submissions:
+    get:
+      operationId: ownSubmissions
+      tags:
+        - Exercises
+      summary: List own exercise submissions and review status
+      description: Planned. Includes own pending, approved, rejected, and archived submissions. Order createdAt DESC, id DESC. Merge own unarchived pending entries into the logging picker.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseList'
+              example: &a8
+                items:
+                  - *a4
+                pagination: *a5
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - *a6
+        - *a7
+  /exercises/{id}:
+    patch:
+      operationId: maintainExercise
+      tags:
+        - Administration
+      summary: Superadmin-only rename or archive/unarchive
+      description: Planned. Only superadmin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+              example: *a4
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExercisePatch'
+            example:
+              name: Barbell back squat
+  /admin/exercises:
+    get:
+      operationId: reviewQueue
+      tags:
+        - Administration
+      summary: List submissions for superadmin review
+      description: Planned. Superadmin only. Order createdAt ASC, id ASC. Admin access does not grant history/plan access.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseList'
+              example: *a8
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - *a6
+        - *a7
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+            default: pending
+          description: Review status
+  /admin/exercises/{id}/approve:
+    post:
+      operationId: approveExercise
+      tags:
+        - Administration
+      summary: Superadmin approves a pending submission
+      description: Planned. Only pending entries can be reviewed; lock the exercise row. Record reviewer and server timestamp. Approval shares the stable exercise ID. No rejection-reason field.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+              example: *a9
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+  /admin/exercises/{id}/reject:
+    post:
+      operationId: rejectExercise
+      tags:
+        - Administration
+      summary: Superadmin rejects a pending submission
+      description: Planned. Only pending entries can be reviewed; lock the exercise row. Record reviewer and server timestamp. Rejection preserves old sets/plans but prevents new selection. No rejection-reason field.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+              example:
+                id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                name: Barbell squat
+                status: rejected
+                submittedBy: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                reviewedBy: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0005
+                reviewedAt: 2026-10-21T18:34:56.123Z
+                archivedAt: null
+                createdAt: 2026-10-21T18:34:56.123Z
+                updatedAt: 2026-10-21T18:34:56.123Z
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+  /workouts:
+    get:
+      operationId: listWorkouts
+      tags:
+        - Sets
+      summary: List only own independent sets
+      description: 'Planned. Owner always comes from the session, including superadmin. Order performedAt DESC, id DESC. Latest values: exerciseId + limit=1 + offset=0, with no time bounds. Clients compute local-day boundaries with IANA timezone rules (23/24/25-hour days), not a fixed 24-hour span.'
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutList'
+              example:
+                items:
+                  - &a10
+                    id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0003
+                    exerciseId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                    performedAt: 2026-10-21T18:34:56.123Z
+                    reps: 10
+                    weight: '135.5'
+                    setNumber: 1
+                    rpe: 5
+                    exercise: &a11
+                      id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                      name: Barbell squat
+                      status: pending
+                      archivedAt: null
+                    userId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                    createdAt: 2026-10-21T18:34:56.123Z
+                    updatedAt: 2026-10-21T18:34:56.123Z
+                pagination: *a5
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - *a6
+        - *a7
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+          description: Filter own history by exercise; unavailable historical exercises remain valid filters
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+          description: Inclusive lower bound; start must precede end
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+          description: Exclusive upper bound
+    post:
+      operationId: createWorkout
+      tags:
+        - Sets
+      summary: Create a set or safely retry its original request
+      description: Planned. Require client UUID and stable performedAt. Hash canonicalWorkoutCreate output using server SHA-256 and store owner/hash in the immutable retry ledger in the same transaction as the set. First creation returns 201; identical owner/request replay returns 200 with the current saved row, without applying changes. Different payload or owner returns generic 409. If subsequently deleted, identical replay returns 410 and never resurrects it. Check retry identity before current exercise eligibility. See API-RULES.md.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Identical retry, including after later edits; current saved row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+              example: *a10
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+              example: *a10
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '410':
+          description: Original set was deleted; retry identity is retained and cannot recreate it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: GONE
+                  message: Original set was deleted; retry identity is retained and cannot recreate it
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkoutCreate'
+            example:
+              id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0003
+              exerciseId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+              performedAt: 2026-10-21T18:34:56.123Z
+              reps: 10
+              weight: '135.5'
+              setNumber: 1
+              rpe: 5
+  /workouts/{id}:
+    get:
+      operationId: getWorkout
+      tags:
+        - Sets
+      summary: Read an owned set
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+              example: *a10
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+    patch:
+      operationId: updateWorkout
+      tags:
+        - Sets
+      summary: Edit an owned set
+      description: Planned. The same existing exercise reference may be retained even if rejected/archived; changing it requires current eligibility. Fields omitted by PATCH remain unchanged. The original create-request hash never changes.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+              example: *a10
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkoutPatch'
+            example:
+              reps: 12
+    delete:
+      operationId: deleteWorkout
+      tags:
+        - Sets
+      summary: Delete an owned set while retaining retry identity
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+  /planned-exercises:
+    get:
+      operationId: listPlans
+      tags:
+        - Plans
+      summary: List own plan entries for one date
+      description: Planned. Order sortOrder ASC, id ASC. Notes remain plain free text; there is no automatic plan completion or creation of sets.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanList'
+              example:
+                items:
+                  - &a12
+                    exerciseId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+                    plannedDate: 2026-10-21
+                    notes: 3x10
+                    id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0004
+                    userId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                    exercise: *a11
+                    sortOrder: 0
+                    createdAt: 2026-10-21T18:34:56.123Z
+                    updatedAt: 2026-10-21T18:34:56.123Z
+                pagination: *a5
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - *a6
+        - *a7
+        - name: plannedDate
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+            description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+            format: date
+          description: Real calendar date; no timezone conversion
+    post:
+      operationId: createPlan
+      tags:
+        - Plans
+      summary: Append a plan entry to an owned date
+      description: Planned. Server creates UUID and appends after the current last position, locking the owner/date. Maximum 500 entries per owner/date. New plans use the same exercise eligibility as new sets.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+              example: *a12
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanCreate'
+            example:
+              exerciseId: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0002
+              plannedDate: 2026-10-21
+              notes: 3x10
+  /planned-exercises/{id}:
+    patch:
+      operationId: updatePlan
+      tags:
+        - Plans
+      summary: Edit an owned plan entry
+      description: Planned. Retaining an existing rejected/archived exercise is allowed. Changing exercise requires current eligibility. Moving dates locks both owner/date keys in sorted order and appends on the destination date, enforcing its 500-entry bound.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+              example: *a12
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanPatch'
+            example:
+              notes: 3x8
+    delete:
+      operationId: deletePlan
+      tags:
+        - Plans
+      summary: Delete an owned plan entry
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+  /planned-exercises/order:
+    put:
+      operationId: reorderPlans
+      tags:
+        - Plans
+      summary: Atomically replace one owned date’s complete ordering
+      description: Planned. orderedIds must include every current entry for the authenticated owner and plannedDate exactly once (maximum 500); an empty list is valid only for an empty date. Under the common owner/date lock, compare membership, defer plans_owner_date_order, update all positions to 0..n-1, and commit. Any mismatch/conflicting concurrent membership returns 409 with no partial reorder. Do not expose foreign-owner IDs.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanReorder'
+            example:
+              plannedDate: 2026-10-21
+              orderedIds:
+                - a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0004
+  /admin/users:
+    get:
+      operationId: listAccounts
+      tags:
+        - Administration
+      summary: Superadmin lists account summaries
+      description: Planned. Order username ASC, id ASC. Deliberately shaped summaries exclude password hashes and sessions; do not join other users’ sets/plans.
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+              example:
+                items:
+                  - *a3
+                pagination: *a5
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - *a6
+        - *a7
+    post:
+      operationId: createAccount
+      tags:
+        - Administration
+      summary: Superadmin creates an account
+      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example: *a3
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+            example:
+              username: alex
+              password: Example-only-long-password!
+              timeZone: America/Denver
+              role: member
+  /admin/users/{id}:
+    patch:
+      operationId: updateAccount
+      tags:
+        - Administration
+      summary: Superadmin changes role or active state
+      description: Planned. Disable revokes sessions. Protect the last active superadmin using a common transaction lock, not a count-then-update race. No destructive account deletion.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example: *a3
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountPatch'
+            example:
+              isActive: false
+  /admin/users/{id}/reset-password:
+    post:
+      operationId: resetPassword
+      tags:
+        - Administration
+      summary: Superadmin resets a password and revokes sessions
+      description: Planned. Admin supplies the temporary password through this authenticated request; never return it, log it, or include a hash. Forced-change policy is decided before authentication implementation, not silently added here.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role or CSRF denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role or CSRF denial
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountReset'
+            example:
+              temporaryPassword: Temporary-example-password!
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: gym_session
+      description: Opaque secret, HttpOnly, Secure in production, SameSite=Lax; HTTPS in production. Local loopback HTTP may omit Secure. Never expose the secret in JSON.
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  schemas:
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          const: ok
+      required:
+        - status
+      additionalProperties: false
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - GONE
+                - EXERCISE_UNAVAILABLE
+                - RATE_LIMITED
+                - INVALID_JSON
+                - BODY_TOO_LARGE
+                - UNSUPPORTED_ENCODING
+                - INTERNAL_ERROR
+            message:
+              type: string
+            fieldErrors:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  message:
+                    type: string
+                required:
+                  - path
+                  - message
+                additionalProperties: false
+          required:
+            - code
+            - message
+          additionalProperties: false
+      required:
+        - error
+      additionalProperties: false
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        username:
+          type: string
+          pattern: ^[a-z0-9_]{3,32}$
+          description: Canonical lowercase ASCII username, 3–32 letters, digits or underscore. API username fields require this canonical form; UI may lowercase input.
+        role:
+          type: string
+          enum:
+            - member
+            - superadmin
+        isActive:
+          type: boolean
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$
+          description: IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+      required:
+        - id
+        - username
+        - role
+        - isActive
+        - timeZone
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    Csrf:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      required:
+        - csrfToken
+      additionalProperties: false
+    Auth:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            username:
+              type: string
+              pattern: ^[a-z0-9_]{3,32}$
+              description: Canonical lowercase ASCII username, 3–32 letters, digits or underscore. API username fields require this canonical form; UI may lowercase input.
+            role:
+              type: string
+              enum:
+                - member
+                - superadmin
+            isActive:
+              type: boolean
+            timeZone:
+              type: string
+              minLength: 1
+              maxLength: 100
+              pattern: ^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$
+              description: IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.
+            createdAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            updatedAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+          required:
+            - id
+            - username
+            - role
+            - isActive
+            - timeZone
+            - createdAt
+            - updatedAt
+          additionalProperties: false
+      required:
+        - csrfToken
+        - user
+      additionalProperties: false
+    Login:
+      type: object
+      properties:
+        username:
+          type: string
+          pattern: ^[a-z0-9_]{3,32}$
+          description: Canonical lowercase ASCII username, 3–32 letters, digits or underscore. API username fields require this canonical form; UI may lowercase input.
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - username
+        - password
+      additionalProperties: false
+    PasswordChange:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: 12–128 characters; never trimmed or normalized. No default password.
+      required:
+        - currentPassword
+        - newPassword
+      additionalProperties: false
+    AccountCreate:
+      type: object
+      properties:
+        username:
+          type: string
+          pattern: ^[a-z0-9_]{3,32}$
+          description: Canonical lowercase ASCII username, 3–32 letters, digits or underscore. API username fields require this canonical form; UI may lowercase input.
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: 12–128 characters; never trimmed or normalized. No default password.
+        role:
+          default: member
+          type: string
+          enum:
+            - member
+            - superadmin
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$
+          description: IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.
+      required:
+        - username
+        - password
+        - timeZone
+      additionalProperties: false
+    AccountPatch:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - member
+            - superadmin
+        isActive:
+          type: boolean
+      additionalProperties: false
+      minProperties: 1
+    AccountReset:
+      type: object
+      properties:
+        temporaryPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: 12–128 characters; never trimmed or normalized. No default password.
+      required:
+        - temporaryPassword
+      additionalProperties: false
+    PreferencesPatch:
+      type: object
+      properties:
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$
+          description: IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.
+      required:
+        - timeZone
+      additionalProperties: false
+      minProperties: 1
+    AccountList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              username:
+                type: string
+                pattern: ^[a-z0-9_]{3,32}$
+                description: Canonical lowercase ASCII username, 3–32 letters, digits or underscore. API username fields require this canonical form; UI may lowercase input.
+              role:
+                type: string
+                enum:
+                  - member
+                  - superadmin
+              isActive:
+                type: boolean
+              timeZone:
+                type: string
+                minLength: 1
+                maxLength: 100
+                pattern: ^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$
+                description: IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.
+              createdAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+              updatedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            required:
+              - id
+              - username
+              - role
+              - isActive
+              - timeZone
+              - createdAt
+              - updatedAt
+            additionalProperties: false
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            offset:
+              type: integer
+              minimum: 0
+              maximum: 100000
+            hasMore:
+              type: boolean
+          required:
+            - limit
+            - offset
+            - hasMore
+          additionalProperties: false
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    Exercise:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+          description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        submittedBy:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        reviewedBy:
+          anyOf:
+            - type: string
+              format: uuid
+              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            - type: 'null'
+        reviewedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            - type: 'null'
+        archivedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+      required:
+        - id
+        - name
+        - status
+        - submittedBy
+        - reviewedBy
+        - reviewedAt
+        - archivedAt
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    ExerciseCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+          description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+      required:
+        - name
+      additionalProperties: false
+    ExercisePatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+          description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+        isArchived:
+          type: boolean
+      additionalProperties: false
+      minProperties: 1
+    ExerciseList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              name:
+                type: string
+                minLength: 1
+                maxLength: 120
+                pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+                description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+              status:
+                type: string
+                enum:
+                  - pending
+                  - approved
+                  - rejected
+              submittedBy:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              reviewedBy:
+                anyOf:
+                  - type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  - type: 'null'
+              reviewedAt:
+                anyOf:
+                  - type: string
+                    format: date-time
+                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                    description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                  - type: 'null'
+              archivedAt:
+                anyOf:
+                  - type: string
+                    format: date-time
+                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                    description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                  - type: 'null'
+              createdAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+              updatedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            required:
+              - id
+              - name
+              - status
+              - submittedBy
+              - reviewedBy
+              - reviewedAt
+              - archivedAt
+              - createdAt
+              - updatedAt
+            additionalProperties: false
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            offset:
+              type: integer
+              minimum: 0
+              maximum: 100000
+            hasMore:
+              type: boolean
+          required:
+            - limit
+            - offset
+            - hasMore
+          additionalProperties: false
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    Workout:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        performedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        reps:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        weight:
+          type: string
+          pattern: ^(?:0|[1-9]\d{0,4})(?:\.\d{1,3})?$
+          description: Decimal pounds from 0 to 99999.999. No sign, exponent, leading zeros, or more than three decimal places; never a JSON number. Responses remove trailing fractional zeros.
+        setNumber:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        rpe:
+          type: integer
+          minimum: 1
+          maximum: 10
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        userId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        exercise:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+              pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+              description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+            status:
+              type: string
+              enum:
+                - pending
+                - approved
+                - rejected
+            archivedAt:
+              anyOf:
+                - type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                  description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                - type: 'null'
+          required:
+            - id
+            - name
+            - status
+            - archivedAt
+          additionalProperties: false
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+      required:
+        - exerciseId
+        - performedAt
+        - reps
+        - weight
+        - setNumber
+        - rpe
+        - id
+        - userId
+        - exercise
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    WorkoutCreate:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        performedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        reps:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        weight:
+          type: string
+          pattern: ^(?:0|[1-9]\d{0,4})(?:\.\d{1,3})?$
+          description: Decimal pounds from 0 to 99999.999. No sign, exponent, leading zeros, or more than three decimal places; never a JSON number. Responses remove trailing fractional zeros.
+        setNumber:
+          default: 1
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        rpe:
+          default: 5
+          type: integer
+          minimum: 1
+          maximum: 10
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+      required:
+        - exerciseId
+        - performedAt
+        - reps
+        - weight
+        - id
+      additionalProperties: false
+    WorkoutPatch:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        performedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        reps:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        weight:
+          type: string
+          pattern: ^(?:0|[1-9]\d{0,4})(?:\.\d{1,3})?$
+          description: Decimal pounds from 0 to 99999.999. No sign, exponent, leading zeros, or more than three decimal places; never a JSON number. Responses remove trailing fractional zeros.
+        setNumber:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        rpe:
+          type: integer
+          minimum: 1
+          maximum: 10
+      additionalProperties: false
+      minProperties: 1
+    WorkoutList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              exerciseId:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              performedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+              reps:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              weight:
+                type: string
+                pattern: ^(?:0|[1-9]\d{0,4})(?:\.\d{1,3})?$
+                description: Decimal pounds from 0 to 99999.999. No sign, exponent, leading zeros, or more than three decimal places; never a JSON number. Responses remove trailing fractional zeros.
+              setNumber:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              rpe:
+                type: integer
+                minimum: 1
+                maximum: 10
+              id:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              userId:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              exercise:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+                    pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+                    description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - approved
+                      - rejected
+                  archivedAt:
+                    anyOf:
+                      - type: string
+                        format: date-time
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                      - type: 'null'
+                required:
+                  - id
+                  - name
+                  - status
+                  - archivedAt
+                additionalProperties: false
+              createdAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+              updatedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            required:
+              - exerciseId
+              - performedAt
+              - reps
+              - weight
+              - setNumber
+              - rpe
+              - id
+              - userId
+              - exercise
+              - createdAt
+              - updatedAt
+            additionalProperties: false
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            offset:
+              type: integer
+              minimum: 0
+              maximum: 100000
+            hasMore:
+              type: boolean
+          required:
+            - limit
+            - offset
+            - hasMore
+          additionalProperties: false
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    Plan:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        plannedDate:
+          type: string
+          pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+          description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+        notes:
+          type: string
+          maxLength: 2000
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        userId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        sortOrder:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        exercise:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+              pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+              description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+            status:
+              type: string
+              enum:
+                - pending
+                - approved
+                - rejected
+            archivedAt:
+              anyOf:
+                - type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                  description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                - type: 'null'
+          required:
+            - id
+            - name
+            - status
+            - archivedAt
+          additionalProperties: false
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+      required:
+        - exerciseId
+        - plannedDate
+        - notes
+        - id
+        - userId
+        - sortOrder
+        - exercise
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    PlanCreate:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        plannedDate:
+          type: string
+          pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+          description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+        notes:
+          default: ''
+          type: string
+          maxLength: 2000
+      required:
+        - exerciseId
+        - plannedDate
+      additionalProperties: false
+    PlanPatch:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        plannedDate:
+          type: string
+          pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+          description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+        notes:
+          type: string
+          maxLength: 2000
+      additionalProperties: false
+      minProperties: 1
+    PlanReorder:
+      type: object
+      properties:
+        plannedDate:
+          type: string
+          pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+          description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+        orderedIds:
+          maxItems: 500
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+          uniqueItems: true
+      required:
+        - plannedDate
+        - orderedIds
+      additionalProperties: false
+    PlanList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              exerciseId:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              plannedDate:
+                type: string
+                pattern: ^(?!0000)\d{4}-\d{2}-\d{2}$
+                description: Real YYYY-MM-DD calendar date, years 0001–9999. No timezone conversion.
+              notes:
+                type: string
+                maxLength: 2000
+              id:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              userId:
+                type: string
+                format: uuid
+                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              sortOrder:
+                type: integer
+                minimum: 0
+                maximum: 2147483647
+              exercise:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+                    pattern: ^[^\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f])?$
+                    description: 1–120 characters, no surrounding whitespace or ASCII control characters. Names need not be unique; IDs identify exercises.
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - approved
+                      - rejected
+                  archivedAt:
+                    anyOf:
+                      - type: string
+                        format: date-time
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+                      - type: 'null'
+                required:
+                  - id
+                  - name
+                  - status
+                  - archivedAt
+                additionalProperties: false
+              createdAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+              updatedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                description: ISO 8601 instant with exactly three fractional digits and Z or a numeric offset; responses use UTC Z. Finer precision is rejected.
+            required:
+              - exerciseId
+              - plannedDate
+              - notes
+              - id
+              - userId
+              - sortOrder
+              - exercise
+              - createdAt
+              - updatedAt
+            additionalProperties: false
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            offset:
+              type: integer
+              minimum: 0
+              maximum: 100000
+            hasMore:
+              type: boolean
+          required:
+            - limit
+            - offset
+            - hasMore
+          additionalProperties: false
+      required:
+        - items
+        - pagination
+      additionalProperties: false

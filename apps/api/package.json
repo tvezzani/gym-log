@@ -1,0 +1,15 @@
+{
+  "name": "@gym-log/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@gym-log/contracts": "*",
+    "express": "5.3.0",
+    "pg": "8.23.1"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  }
+}
