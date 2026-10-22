@@ -172,4 +172,16 @@ Contract generation/validation, runtime boundary tests, real empty-database migr
 
 Authentication/account administration is implemented and verified against real PostgreSQL. User chose a fixed 30-day session lifetime and mandatory immediate password changes for initial/bootstrap/reset accounts. The application has exactly two roles and one family instance, without tenancy. `AUTH.md` documents the implemented flows, first-admin CLI, rate limits, revocation, cookie/CSRF and proxy configuration. `mustChangePassword` is a forward schema/contract change; applied migrations were preserved.
 
-The next build milestone is the complete exercise/set/plan domain API and its ownership/concurrency gate. Browser forms and deployment remain later work. No real family admin was bootstrapped without a supplied secret.
+The exercise/set/plan domain API and its ownership/concurrency gate are completed in milestone 4 below. Browser forms and deployment remain later work. No real family admin was bootstrapped without a supplied secret.
+
+## Milestone 4 delivery — October 21, 2026
+
+The complete domain API is implemented: shared exercises and own submissions, admin review/rename/archive, independent set CRUD with durable create retries, owner/exercise/time-filtered history and latest values, private calendar-date plan CRUD and atomic full-date reordering. Existing session/CSRF/role/password-change guards apply to all domain requests, with fresh transactional owner checks. No additional schema migration was needed.
+
+The real PostgreSQL API gate passes the ownership, exercise lifecycle, duplicate save, numeric/date precision, DST, pagination and concurrency matrix. See `API-GATE.md` for reproducible commands and observed evidence. Generated OpenAPI and request/response examples describe implemented routes. The next task is milestone 5: the core phone logging frontend, including safe recovery after uncertain saves. Actual phone verification and deployment remain later work.
+
+## Milestone 5 implementation — October 22, 2026
+
+The core phone frontend now uses React/Vite and custom SCSS, following the supplied screenshot's charcoal/yellow visual direction. Login/forced password change, Today, calendar history, exact decimal set entry, last values, copy, editing, deletion and safe in-memory recovery after uncertain saves are implemented. `FRONTEND-GATE.md` records real Chromium/API/PostgreSQL verification and known limits. No production hosting or real family account was added.
+
+The implementation and browser gate are complete; the milestone's actual-phone keyboard/touch verification remains open. Milestone 6 is the next implementation step: plans, timezone preferences, exercise submission/review and account administration screens.

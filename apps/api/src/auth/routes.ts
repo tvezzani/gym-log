@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import type { ZodType } from 'zod';
 import {
+  setupCreateSchema,
   loginSchema,
   passwordChangeSchema,
   accountCreateSchema,
@@ -13,6 +14,7 @@ import {
 } from '@gym-log/contracts';
 import type { Config } from '../config.js';
 import { HttpError, parse } from '../errors.js';
+import { setupAdmin, setupRequired } from './bootstrap.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import {
   authCookies,
@@ -78,6 +80,25 @@ export function createAuthRouter(pool: Pool, config: Config) {
     const token =
       auth?.csrfToken ?? cookies.readPreauth(req) ?? cookies.issuePreauth(res);
     res.json({ csrfToken: token });
+  });
+  router.get('/auth/setup', async (req, res) => {
+    if (
+      req.get('Sec-Fetch-Site') === 'cross-site' ||
+      (req.get('Origin') && req.get('Origin') !== config.APP_ORIGIN)
+    )
+      throw new HttpError(403, 'FORBIDDEN', 'Origin not permitted');
+    res.json({ setupRequired: await setupRequired(pool) });
+  });
+  router.post('/auth/setup', async (req, res) => {
+    requireOrigin(req, config);
+    await consumeLimit(pool, config, `setup:${req.ip}`, 10);
+    const expected = cookies.readPreauth(req);
+    if (!expected || !equalToken(req.get('X-CSRF-Token'), expected))
+      throw new HttpError(403, 'FORBIDDEN', 'Invalid CSRF token');
+    const input = body(req, setupCreateSchema);
+    const user = await setupAdmin(pool, input);
+    cookies.clearPreauth(res);
+    res.status(201).json(user);
   });
   router.post('/auth/login', async (req, res) => {
     requireOrigin(req, config);

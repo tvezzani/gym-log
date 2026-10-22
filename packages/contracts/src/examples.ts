@@ -64,6 +64,12 @@ const plan = {
 };
 const pagination = { limit: 50, offset: 0, hasMore: false };
 export const examples = {
+  SetupStatus: { setupRequired: true },
+  SetupCreate: {
+    username: 'admin',
+    password: 'Example-only-setup-password!',
+    timeZone: 'America/Denver',
+  },
   Health: { status: 'ok' },
   ApiError: {
     error: {

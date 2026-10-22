@@ -8,6 +8,10 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   { languageOptions: { globals: globals.node } },
   {
+    files: ['apps/web/**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',

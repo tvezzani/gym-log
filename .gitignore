@@ -13,3 +13,6 @@ backups/
 Thumbs.db
 
 *.tsbuildinfo
+
+test-results/
+playwright-report/

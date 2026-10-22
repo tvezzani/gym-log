@@ -61,7 +61,7 @@ test(
       // Prove the upgrade preserves existing identities and security state.
       legacyDirectory = await mkdtemp(join(tmpdir(), 'gym-log-legacy-roles-'));
       for (const name of migrationFiles.filter(
-        (file) => file !== '1792620000000_rename_roles.sql',
+        (file) => Number(file.split('_')[0]) < 1792620000000,
       ))
         await cp(join('db/migrations', name), join(legacyDirectory, name));
       await migrate(legacyDirectory);
@@ -77,6 +77,13 @@ test(
         [legacyUser, 'd'.repeat(64), 'c'.repeat(43)],
       );
       await migrate();
+      assert.ok(
+        (
+          await operator.query(
+            'SELECT completed_at FROM app.installation WHERE id=1',
+          )
+        ).rows[0].completed_at,
+      );
       const upgraded = (
         await operator.query(
           'SELECT id,role,password_hash,is_active,must_change_password FROM app.users WHERE id=ANY($1::uuid[]) ORDER BY username',
@@ -361,7 +368,10 @@ test(
       temporary = await mkdtemp(join(tmpdir(), 'gym-log-migrations-'));
       await cp('db/migrations', temporary, { recursive: true });
       await writeFile(
-        join(temporary, '1792620000001_intentional_failure.sql'),
+        join(
+          temporary,
+          `${Math.max(...migrationFiles.map((name) => Number(name.split('_')[0]))) + 1}_intentional_failure.sql`,
+        ),
         '-- Up Migration\nCREATE TABLE app.rollback_probe(id integer);\nSELECT 1/0;\n-- Down Migration\nSELECT 1;\n',
       );
       await assert.rejects(

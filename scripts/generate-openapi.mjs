@@ -162,6 +162,39 @@ operation(
   },
 );
 operation(
+  'get',
+  '/auth/setup',
+  'setupStatus',
+  'Authentication',
+  'Check whether first-run setup is required',
+  'SetupStatus',
+  {
+    public: true,
+    notes:
+      'Implemented. Returns only setupRequired. Existing or previously configured installations with real admins remain closed even if every admin is disabled or demoted. Exact disabled development fixtures are not usable accounts. Same-origin reads only.',
+  },
+);
+operation(
+  'post',
+  '/auth/setup',
+  'setupAdmin',
+  'Authentication',
+  'Create the first admin once',
+  'User',
+  {
+    public: true,
+    status: 201,
+    request: 'SetupCreate',
+    notes:
+      'Implemented. Same-origin and signed pre-login CSRF required. Serialized with CLI bootstrap and admin mutations. The owner chooses their final password; mustChangePassword=false. No session is issued; log in normally. Later accounts/reset/CLI bootstrap keep mandatory password changes.',
+    responses: {
+      403: error('Invalid origin or signed CSRF context'),
+      409: error('Setup already completed or username unavailable'),
+      429: error('Setup rate limit exceeded'),
+    },
+  },
+);
+operation(
   'post',
   '/auth/login',
   'login',
@@ -501,23 +534,12 @@ operation(
   },
 );
 
-const implemented = new Set([
-  '/health',
-  '/auth/csrf',
-  '/auth/login',
-  '/auth/logout',
-  '/auth/me',
-  '/auth/password',
-  '/preferences',
-  '/admin/users',
-  '/admin/users/{id}',
-  '/admin/users/{id}/reset-password',
-]);
+const implemented = new Set(Object.keys(paths));
 for (const [path, methods] of Object.entries(paths))
   for (const [method, op] of Object.entries(methods)) {
     if (implemented.has(path)) {
       op.description = op.description.startsWith('Planned endpoint;')
-        ? 'Implemented in milestone 3.'
+        ? 'Implemented.'
         : op.description.replace(/^Planned\./, 'Implemented.');
       op.description = op.description.replace(
         'Session lifetime and reset policy are settled before milestone 3.',
@@ -626,9 +648,9 @@ const document = {
   openapi: '3.1.0',
   info: {
     title: 'Gym Log API',
-    version: '0.2.0',
+    version: '0.3.0',
     description:
-      'Authentication and account administration are implemented in milestone 3. Exercise, set and plan endpoints follow in milestone 4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.',
+      'The complete v1 API is implemented and verified against PostgreSQL, including authentication, accounts, exercises, independent sets and private plans. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.',
   },
   servers: [{ url: '/api/v1' }],
   tags: [

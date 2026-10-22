@@ -29,9 +29,19 @@ npm run dev
 
 Development/test HTTP is allowed only for loopback origins, such as `http://127.0.0.1:3000`. Use that exact configured origin for mutations; `localhost` is a different origin. Production requires an HTTPS origin, HTTPS requests, and Secure cookies. No CORS access is enabled. If a verified loopback reverse proxy terminates TLS, explicitly set `TRUST_PROXY=loopback`; it must overwrite forwarded headers. Otherwise leave it at `none`. This follows [Express's proxy guidance](https://expressjs.com/en/guide/behind-proxies/). Production Tailscale/Compose deployment remains milestone 7.
 
+## First-run browser setup
+
+After starting the database, applying migrations and running `npm run dev:api` plus `npm run dev:web`, open `http://127.0.0.1:5173`. An unconfigured installation shows **First-time setup** before the login screen. Choose the first admin's username, password, confirmation and initial timezone. Usernames use 3–32 lowercase letters, numbers or underscores; the UI normalizes case. Passwords use 12–128 characters and are never trimmed or normalized. There are no default credentials.
+
+The chosen setup password is final: this account has `mustChangePassword=false` and can log in normally without choosing a second password immediately. Admin-assigned initial passwords, CLI bootstrap/recovery passwords and admin resets remain temporary and still require an immediate change. No login session is issued by setup itself.
+
+Public GET `/api/v1/auth/setup` returns only `{setupRequired:boolean}` with no account details. POST to the same path accepts `{username,password,timeZone}`, requires exact Origin and signed pre-login CSRF, is rate limited, and returns a shaped User with 201. Browser and CLI initialization share the admin transaction lock so competing requests cannot create two first admins. The UI handles a stale setup page or a lost creation response by rechecking completion and directing the user to login.
+
+`app.installation` records completion in the same transaction as first-admin creation. A restricted database trigger also covers CLI/operator-created admins and role promotions. Existing installations with any real admin are marked complete on migration. Only the exact disabled, unusable sample identities from the development fixture script are exempt; a narrowly scoped forward migration reconciles a fixture-only database without changing sample data. Disabling or demoting all admins, session expiry or restarting the API never reopens public setup. Runtime database credentials can read the marker but cannot reset it, delete it or call its privileged trigger function. Missing state fails closed. The migration does not create an account, change existing credentials, or erase data.
+
 ## Bootstrap the first real admin
 
-The migration/fixtures do not create a usable login. This command creates the first active admin only if none exists; the same transaction lock used by account administration serializes concurrent bootstrap attempts. It requires an explicit username/timezone and receives the password through stdin. There is no default password and it is never echoed or logged.
+The browser setup above is the normal first-run path. The optional local CLI remains available for operator bootstrap/recovery. It creates an active admin only if none exists; the same transaction lock used by account administration serializes concurrent bootstrap attempts. It requires an explicit username/timezone and receives the password through stdin. There is no default password and it is never echoed or logged.
 
 In an interactive **Ubuntu Bash** terminal:
 
@@ -42,7 +52,7 @@ printf '%s' "$gym_bootstrap_password" | npm run admin:bootstrap -- --username ti
 unset gym_bootstrap_password
 ```
 
-Choose your own canonical lowercase username and temporary password. The account initially requires a password change. Authenticate using the API flow below; the browser forms arrive in the frontend milestones. No real family admin was created automatically during implementation. Integration tests bootstrap only inside a disposable database.
+Choose your own canonical lowercase username and temporary password. The account initially requires a password change. Log in through the browser and complete its required password-change screen. No real family admin was created automatically during implementation. Integration tests bootstrap only inside a disposable database.
 
 If an active admin already exists, bootstrap fails rather than creating a second one. Existing admins create additional accounts through the API. Disabling/demoting the final active admin is blocked, even for concurrent requests. Database-operator recovery remains separate; do not weaken the guard or expose operator credentials through the API.
 
@@ -55,7 +65,7 @@ If an active admin already exists, bootstrap fails rather than creating a second
 
 CSRF failures and role denial return 403. Required-change restrictions return `PASSWORD_CHANGE_REQUIRED` (403); missing/expired/revoked/disabled auth returns 401. All request/response shapes, field errors and examples are in generated `openapi.yaml`. Admin-created accounts start as users unless a admin role is explicitly supplied; only those two enum values are accepted.
 
-Admin account endpoints are implemented: list/create, enable/disable, change role, and reset password. They deliberately return user summaries without password hashes, session data, or other users' workouts/plans. `/preferences` changes only the current user's timezone. Exercise/set/plan handlers remain milestone 4.
+Admin account endpoints are implemented: list/create, enable/disable, change role, and reset password. They deliberately return user summaries without password hashes, session data, or other users' workouts/plans. `/preferences` changes only the current user's timezone. Exercise/set/plan handlers are implemented and verified in milestone 4; see `API-GATE.md`.
 
 ## Storage, revocation and rate limits
 
@@ -77,7 +87,7 @@ It removes expired session/rate-limit rows only. Revoked sessions remain unusabl
 
 `npm run test:db` creates a uniquely named disposable PostgreSQL database and proves bootstrap, real hashes/sessions, the mandatory-change restriction, session rotation/expiry, user denial, admin account controls, reset/disable/role revocation, reset/login races, CSRF/origin checks, HTTPS cookies/proxy configuration, persistent rate limits, and concurrent protection of the last admin. It removes that test database afterward. `npm run check` also validates source types, lint, formatting, examples and generated OpenAPI drift.
 
-There is no browser login/change-password form yet. These endpoints are ready for API clients and the later frontend. Deployment HTTPS, proxy topology, phone checks and full workout/plan ownership tests remain their planned milestones.
+First-run setup and login/change-password browser forms are implemented and verified against real sessions and PostgreSQL. The full workout/plan ownership API gate now passes. Deployment HTTPS, proxy topology and phone checks remain their planned milestones.
 
 ## Role labels — October 21, 2026
 

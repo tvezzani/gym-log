@@ -4,6 +4,7 @@ import type { ApiErrorResponse, HealthResponse } from '@gym-log/contracts';
 import type { Config } from './config.js';
 import { HttpError } from './errors.js';
 import { createAuthRouter } from './auth/routes.js';
+import { createDomainRouter } from './domain/routes.js';
 
 export function createApp(options?: { pool: Pool; config: Config }) {
   const app = express();
@@ -14,8 +15,14 @@ export function createApp(options?: { pool: Pool; config: Config }) {
   app.get('/api/v1/health', (_req, res) =>
     res.json({ status: 'ok' } satisfies HealthResponse),
   );
-  if (options)
-    app.use('/api/v1', createAuthRouter(options.pool, options.config));
+  if (options) {
+    // Auth router establishes fresh session/CSRF guards before domain handlers.
+    app.use(
+      '/api/v1',
+      createAuthRouter(options.pool, options.config),
+      createDomainRouter(options.pool),
+    );
+  }
   app.use((_req, res) =>
     res.status(404).json({
       error: { code: 'NOT_FOUND', message: 'Route not found' },

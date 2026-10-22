@@ -70,18 +70,32 @@ export async function transaction<T>(
   pool: Pool,
   work: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const value = await work(client);
-    await client.query('COMMIT');
-    return value;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? error.code
+          : undefined;
+      if (code !== '40P01' && code !== '40001') throw error;
+      if (attempt === 2)
+        throw new HttpError(
+          409,
+          'CONFLICT',
+          'Concurrent update; retry the request',
+        );
+    } finally {
+      client.release();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5 * (attempt + 1)));
   }
+  throw new Error('Transaction retry exhausted');
 }
 export async function sessionByHash(
   db: Pool | PoolClient,

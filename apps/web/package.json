@@ -2,5 +2,23 @@
   "name": "@gym-log/web",
   "private": true,
   "version": "0.0.0",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@gym-log/contracts": "*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "sass": "1.106.1",
+    "vite": "8.3.5"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  }
 }

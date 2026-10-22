@@ -1,8 +1,22 @@
 # API examples
 
-Authentication, account administration and own preferences are implemented in milestone 3. The exercise/set/plan examples below describe milestone 4 endpoints. Every operation also has typed request/response examples in `openapi.yaml`, generated from `packages/contracts/src/examples.ts` and checked against runtime schemas. IDs below are synthetic. Passwords shown in OpenAPI are examples, never installed credentials.
+All endpoints below are implemented. The milestone 4 gate exercises these flows through HTTP and real PostgreSQL; see `API-GATE.md`. Every operation also has typed request/response examples in `openapi.yaml`, generated from `packages/contracts/src/examples.ts` and checked against runtime schemas. IDs below are synthetic. Passwords shown in OpenAPI are examples, never installed credentials.
 
 Authenticate with `/auth/csrf` and `/auth/login`, retaining the cookie and returned CSRF token. Authenticated writes require `Origin`, `X-CSRF-Token` and the session cookie. Owner identity is never supplied in JSON.
+
+## Configure a fresh installation
+
+GET `/auth/setup` returns `{"setupRequired":true}` only before initial configuration. Obtain the signed pre-login cookie/token from `/auth/csrf`, then POST `/auth/setup` with exact Origin and CSRF:
+
+```json
+{
+  "username": "admin",
+  "password": "Example-only-chosen-password!",
+  "timeZone": "America/Denver"
+}
+```
+
+201 returns User with role `admin` and `mustChangePassword:false`; no session is created. Log in with the password you chose. Competing or later setup requests return 409; setup stays closed across restarts and disabled/demoted accounts. The browser handles this flow automatically. Admin-created/reset accounts and optional CLI bootstrap still require an immediate password change.
 
 ## Submit a name and use it while pending
 

@@ -1,5 +1,7 @@
 import { healthSchema, apiErrorSchema } from './primitives.js';
 import {
+  setupStatusSchema,
+  setupCreateSchema,
   userSchema,
   csrfSchema,
   authSchema,
@@ -32,6 +34,8 @@ import {
 } from './plans.js';
 
 export const contractSchemas = {
+  SetupStatus: setupStatusSchema,
+  SetupCreate: setupCreateSchema,
   Health: healthSchema,
   ApiError: apiErrorSchema,
   User: userSchema,

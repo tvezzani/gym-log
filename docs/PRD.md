@@ -144,4 +144,12 @@ These are contract/schema decisions, not completed endpoint implementation. Auth
 
 ## Milestone 3 authentication delivery
 
-Only two application roles exist: user and admin, in a single family instance with no tenancy layer. Authentication/account endpoints and own timezone preferences are implemented. User responses now include `mustChangePassword`; new/bootstrap/reset accounts are restricted until changing to a different password. Session lifetime is 30 absolute days. See `AUTH.md` for CLI bootstrap, cookie/CSRF/proxy configuration, rate limiting, revocation and verification. Exercise/set/plan endpoints and browser forms remain in later milestones.
+Only two application roles exist: user and admin, in a single family instance with no tenancy layer. Authentication/account endpoints and own timezone preferences are implemented. User responses now include `mustChangePassword`; new/bootstrap/reset accounts are restricted until changing to a different password. Session lifetime is 30 absolute days. See `AUTH.md` for CLI bootstrap, cookie/CSRF/proxy configuration, rate limiting, revocation and verification. Exercise/set/plan endpoints are now implemented in milestone 4; browser forms remain later work.
+
+## Milestone 4 domain API delivery
+
+The complete v1 API is implemented and verified before frontend work. `API-GATE.md` records real PostgreSQL evidence for private set/plan ownership (including admin requests), exercise approval/lifecycle, safe create retries and post-edit/delete replay, decimal and timestamp fidelity, calendar dates/DST, stable history and atomic plan ordering/concurrency. Browser forms, failed-save UX, actual phone checks and private deployment remain their planned milestones.
+
+## First-run setup decision — October 22, 2026
+
+The user chose a browser-based initial setup flow: on an unconfigured installation's first visit, choose the first admin's username/password and initial timezone. There are no standard/default credentials. This first password is chosen by its owner and is immediately usable; passwords assigned by an admin or CLI and password resets still require a change. Initial setup closes permanently after completion. All later account creation/recovery remains admin-managed; the application has no ongoing public signup.

@@ -65,3 +65,7 @@ export const accountListSchema = z.strictObject({
 });
 export type User = z.infer<typeof userSchema>;
 export type AccountCreate = z.input<typeof accountCreateSchema>;
+
+export const setupStatusSchema = z.strictObject({ setupRequired: z.boolean() });
+export const setupCreateSchema = accountCreateSchema.omit({ role: true });
+export type SetupCreate = z.infer<typeof setupCreateSchema>;

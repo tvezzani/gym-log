@@ -61,16 +61,20 @@ export const workoutListSchema = z.strictObject({
   pagination: paginationSchema,
 });
 
+export function normalizeWeight(input: string): string {
+  const value = weightSchema.parse(input);
+  const [whole, rawFraction] = value.split('.');
+  const fraction = rawFraction?.replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : whole!;
+}
 export function canonicalWorkoutCreate(input: unknown): string {
   const value = workoutCreateSchema.parse(input);
-  const [whole, rawFraction] = value.weight.split('.');
-  const fraction = rawFraction?.replace(/0+$/, '');
   return JSON.stringify({
     id: value.id.toLowerCase(),
     exerciseId: value.exerciseId.toLowerCase(),
     performedAt: new Date(value.performedAt).toISOString(),
     reps: value.reps,
-    weight: fraction ? `${whole}.${fraction}` : whole,
+    weight: normalizeWeight(value.weight),
     setNumber: value.setNumber,
     rpe: value.rpe,
   });
