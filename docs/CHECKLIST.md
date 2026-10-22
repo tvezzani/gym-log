@@ -31,16 +31,16 @@ Complete one small, usable stage at a time. Checked items describe setup already
 
 - [x] Write migrations for users, exercises, independent workout records, planned exercises, and auth sessions.
 - [x] Add constraints, ownership indexes, and deterministic migration/seed commands.
-- [ ] Implement the superadmin bootstrap and username/password session login.
-- [ ] Implement account create/disable/reset and password change, with role checks and session revocation.
+- [x] Implement the admin bootstrap and username/password session login.
+- [x] Implement account create/disable/reset and password change, with role checks and session revocation.
 - [ ] Implement exercise, set, and planned-exercise endpoints with runtime validation.
-- [ ] Implement exercise submissions and a superadmin approval/rejection queue; restrict pending submissions to their owner and reviewers.
-- [ ] Allow logging against own pending exercises; block use of another member's pending exercise and preserve history through review decisions.
+- [ ] Implement exercise submissions and a admin approval/rejection queue; restrict pending submissions to their owner and reviewers.
+- [ ] Allow logging against own pending exercises; block use of another user's pending exercise and preserve history through review decisions.
 - [x] Define/test SQL `date` and `YYYY-MM-DD` contracts for plans, with date validation and no timezone conversion.
 - [ ] Implement history filters, pagination, duplicate-request protection, and consistent errors.
 - [x] Publish an OpenAPI contract and usable example requests (planned feature routes; health implemented).
 - [ ] Verify the API can create, retrieve, edit, and delete a set before frontend work.
-- [ ] Test real PostgreSQL persistence, integer RPE validation, retry behavior, authentication, exercise approval, and ownership isolation (including superadmin app requests).
+- [ ] Test real PostgreSQL persistence, integer RPE validation, retry behavior, authentication, exercise approval, and ownership isolation (including admin app requests).
 
 ## 3. Deliver the phone workflow
 
@@ -52,7 +52,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Build history filtering and set edit/delete.
 - [ ] Build calendar-date plans with notes, ordering, and a Log set shortcut; verify dates do not shift with timezones.
 - [ ] Add minimal password/settings and account administration screens.
-- [ ] Add exercise submission/status and superadmin approval controls.
+- [ ] Add exercise submission/status and admin approval controls.
 - [ ] Check touch targets, labels, keyboard behavior, and layout on the actual phone.
 - [ ] Run one full flow: admin creates family account → user logs in → saves set → reloads → sees history.
 
@@ -65,7 +65,7 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Confirm app/database port bindings match the private deployment design.
 - [ ] Enable restart behavior, health checks, and useful logs without credentials/passwords.
 - [ ] Schedule backups outside the database volume and perform a test restore.
-- [ ] Document updates, rollback, superadmin recovery, and backup restoration.
+- [ ] Document updates, rollback, admin recovery, and backup restoration.
 - [ ] Test from the phone over cellular data using Tailscale, then test a service/server restart.
 
 ## 5. Use it, then refine
@@ -73,3 +73,11 @@ Complete one small, usable stage at a time. Checked items describe setup already
 - [ ] Log a real gym visit and note interruptions or unnecessary taps.
 - [ ] Fix the largest friction points before expanding scope.
 - [ ] Revisit export, timers, templates, charts, and offline support only after the core flow is reliable.
+
+## Milestone 3 verification
+
+- [x] Verify 30-day absolute expiry and immediate password changes for new/bootstrap/reset accounts.
+- [x] Verify exactly two roles, user denial on admin routes, shaped user responses and role-change session revocation.
+- [x] Verify CSRF/origin checks, production Secure cookies, explicit proxy trust and persistent login throttles.
+- [x] Verify reset/login revocation races, concurrent last-admin protection and serialized bootstrap in real PostgreSQL.
+- [ ] Build browser login and password-change forms during the frontend milestones.

@@ -13,7 +13,7 @@ Use the proposed TypeScript npm workspace layout: `apps/api`, `apps/web`, `packa
 Preserve these boundaries throughout:
 
 - Each workout row is one independent set. There are no sessions, inferred daily numbering, or automatic plan completion.
-- Records and plans belong to the authenticated user. Superadmin has no app/API access to other users' history or plans.
+- Records and plans belong to the authenticated user. Admin has no app/API access to other users' history or plans.
 - Only approved, unarchived exercises and the user's own unarchived pending exercises can be selected for new sets. Review decisions preserve existing references and history.
 - Weight is a decimal value in pounds, RPE is an integer, and planned dates are calendar dates without timezones.
 - Saves require the server. A failed request preserves the form; retry protection does not introduce offline storage or synchronization.
@@ -25,7 +25,7 @@ These are proposals, not newly confirmed requirements. Update `QUESTIONS.md` whe
 | When                     | Detail                                   | Proposed direction                                                                                                                                                                                                                                                   |
 | ------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Before scaffolding       | Development checkout and tooling         | Verify WSL access and use a checkout under its Linux home if available. Otherwise document a working Windows path; do not block API development solely on WSL. Select the Node release, package versions, SQL access/migration tooling, and validation library here. |
-| Before schema/API freeze | Exercise maintenance and rejection       | Adopt the PRD proposal: superadmin rename/archive, rejected exercises unavailable for new entries, and existing history preserved. Omit a rejection reason field unless requested.                                                                                   |
+| Before schema/API freeze | Exercise maintenance and rejection       | Adopt the PRD proposal: admin rename/archive, rejected exercises unavailable for new entries, and existing history preserved. Omit a rejection reason field unless requested.                                                                                        |
 | Before schema/API freeze | Plans referencing unavailable exercises  | Proposed: use the same exercise eligibility for new plans as for new sets. Preserve older plans if an exercise is rejected/archived, label its status, and block logging from it. Confirm and document this rule.                                                    |
 | Before schema/API freeze | Editing historical sets/plans            | Proposed: allow edits that retain an existing rejected/archived exercise reference; require current eligibility when changing the exercise. Preserve the displayed historical reference.                                                                             |
 | Before authentication    | Session lifetime and temporary passwords | Choose explicit expiry and whether reset/bootstrap passwords require a change on next login. A forced-change policy requires schema/session state, a restricted auth flow, and UI support. Do not silently add it.                                                   |
@@ -68,16 +68,16 @@ Keep the proposed positive-rep strength-set scope. Defer warmup markers, failed 
 
 ## 3. Implement authentication and account administration
 
-**Result:** members and superadmins can authenticate, with distinct account-management permissions.
+**Result:** users and admins can authenticate, with distinct account-management permissions.
 
-- Add a server command to create the first superadmin using a supplied secret without committing or logging it.
+- Add a server command to create the first admin using a supplied secret without committing or logging it.
 - Implement maintained Argon2id password hashing, opaque PostgreSQL-backed sessions, login/logout/me, and own-password changes.
 - Configure cookie flags, expiry, login session rotation, CSRF protection, login rate limits, and deployment-specific proxy trust. Document any local HTTP development exceptions; production requires secure cookies over HTTPS.
 - Implement account creation, disable, password reset, and authorized role updates. Revoke sessions on disable/reset and define consistent revocation for own-password changes.
-- Guard against disabling or demoting the last active superadmin inside a concurrency-safe transaction. Recheck active account/session state on authenticated requests.
+- Guard against disabling or demoting the last active admin inside a concurrency-safe transaction. Recheck active account/session state on authenticated requests.
 - Keep passwords, hashes, session secrets, and operator credentials out of API responses and logs. Return deliberately shaped user objects.
 
-**Exit check:** integration tests exercise real sessions and PostgreSQL, member denial on admin routes, disable/reset revocation, CSRF failure, and concurrent attempts to remove the final active superadmin. Verify the selected temporary-password policy.
+**Exit check:** integration tests exercise real sessions and PostgreSQL, user denial on admin routes, disable/reset revocation, CSRF failure, and concurrent attempts to remove the final active admin. Verify the selected temporary-password policy.
 
 ## 4. Implement the complete domain API
 
@@ -92,13 +92,13 @@ Implement in this order:
 5. **Private plans:** dated CRUD, notes, deterministic ordering/reordering, and the adopted exercise eligibility rules. Logging from a plan remains a UI prefill action, never automatic set creation.
 6. **Settings:** implement the adopted timezone preference contract and validation. Add request examples for every area and keep OpenAPI synchronized.
 
-Scope record queries and mutations by authenticated owner, including superadmin requests. Apply exercise eligibility checks within the transaction that writes the set/plan, coordinating with review/archive changes so races cannot bypass the rules.
+Scope record queries and mutations by authenticated owner, including admin requests. Apply exercise eligibility checks within the transaction that writes the set/plan, coordinating with review/archive changes so races cannot bypass the rules.
 
 **Exit check — API gate before frontend work:** demonstrate create, retrieve, edit, and delete of a persisted set; complete all endpoint examples; pass PostgreSQL integration tests covering the matrix below. Start frontend feature work only after this gate passes.
 
 | Risk                 | Required evidence                                                                                                                                                                      |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ownership leaks      | Two members plus a superadmin attempt list/detail/edit/delete and referenced-ID access across users; sets and plans stay private.                                                      |
+| Ownership leaks      | Two users plus a admin attempt list/detail/edit/delete and referenced-ID access across users; sets and plans stay private.                                                             |
 | Exercise lifecycle   | Own pending works, another user's pending is denied, approval shares only the exercise, rejection/archive preserves existing sets, and unavailable exercises cannot be newly selected. |
 | Duplicate saves      | Repeated and concurrent identical create requests produce one row; conflicting payloads and cross-owner UUID collisions are handled safely.                                            |
 | Numeric corruption   | Decimal weight round-trips exactly; excessive precision, overflow, invalid reps/set numbers, and fractional/out-of-range RPE fail. Omitted RPE becomes 5.                              |
@@ -107,7 +107,7 @@ Scope record queries and mutations by authenticated owner, including superadmin 
 
 ## 5. Build the core phone logging workflow
 
-**Result:** a member can log in, save independent sets, reload, and correct mistakes on a phone.
+**Result:** a user can log in, save independent sets, reload, and correct mistakes on a phone.
 
 - Build login and authenticated navigation, then Today and the set form using custom React/SCSS components.
 - Prefill fresh entries with set 1, RPE 5, and the current performed time. Use eligible exercise selections and show the last recorded values for the chosen exercise.
@@ -127,10 +127,10 @@ Scope record queries and mutations by authenticated owner, including superadmin 
 - Add Plan with date selection, exercise/notes display such as `Barbell squats [3x10]`, create/edit/delete, and ordering.
 - Display today's plans on Today. Log set from a plan preselects the exercise; it does not interpret notes or create a set until saved.
 - Add own password/timezone controls and exercise submission/status. Handle rejected/archived references visibly using the adopted rules.
-- Add superadmin account create/disable/reset controls and exercise approval/rejection/rename/archive controls. Do not provide history browsing for other members.
+- Add admin account create/disable/reset controls and exercise approval/rejection/rename/archive controls. Do not provide history browsing for other users.
 - Check loading, empty, validation, expired-session, and server-failure states across screens, with keyboard-accessible forms and controls.
 
-**Exit check:** admin creates a family account → member logs in → submits an exercise → logs privately while pending → admin approves → another member sees the exercise but cannot see the first member's sets. Verify plan dates survive reload/timezone changes and all account controls enforce API rules.
+**Exit check:** admin creates a family account → user logs in → submits an exercise → logs privately while pending → admin approves → another user sees the exercise but cannot see the first user's sets. Verify plan dates survive reload/timezone changes and all account controls enforce API rules.
 
 ## 7. Deploy privately and prove recovery
 
@@ -139,7 +139,7 @@ Scope record queries and mutations by authenticated owner, including superadmin 
 - Confirm the environment details before applying server configuration. Build production frontend/API artifacts; serve the frontend and `/api/v1` under one origin. SPA fallback must not hide missing API routes.
 - Add production Docker Compose for the app and PostgreSQL, persistent database storage, health checks, restart policies, and explicit migration steps. Use separate application and database-operator credentials with appropriate privileges.
 - Publish the app only on loopback and keep PostgreSQL internal. Configure the proposed host Tailscale Serve HTTPS entry point according to the existing setup and validate family device access.
-- Document secrets, superadmin bootstrap/recovery, update procedure, and compatible rollback steps. Take a backup before schema changes; do not assume rolling back an app image reverses its database migration.
+- Document secrets, admin bootstrap/recovery, update procedure, and compatible rollback steps. Take a backup before schema changes; do not assume rolling back an app image reverses its database migration.
 - Schedule database backups outside the live volume, define retention/access, and restore into a separate database to verify users, exercises, sets, and plans. Keep secrets and backups outside Git.
 - Write an operations runbook covering service status, logs without secrets, readiness failures, backup restoration, and server restart.
 
@@ -166,4 +166,10 @@ The first implementation task is milestone 1: verify the chosen checkout, select
 
 The API contract, shared schemas, examples, and domain migration are implemented. See `API-RULES.md` for the adopted exercise lifecycle, account-format, timezone, precision, retry and reorder choices; `API-EXAMPLES.md` and generated `openapi.yaml` contain the REST examples. Exercise naming is admin-only, as confirmed during this milestone. The proposal table above is historical planning context where these decisions now supersede it.
 
-Contract generation/validation, runtime boundary tests, real empty-database migrations, SQL constraint tests, migration reruns/failure rollback, and repeatable development fixtures are verified before delivery. Feature endpoints and their authorization/concurrency tests remain milestones 3–4. Before milestone 3, settle session lifetime and temporary-password forced-change behavior. No frontend feature work is included.
+Contract generation/validation, runtime boundary tests, real empty-database migrations, SQL constraint tests, migration reruns/failure rollback, and repeatable development fixtures are verified before delivery. Feature endpoints and their authorization/concurrency tests remain milestones 3–4. Session lifetime and temporary-password behavior are settled in milestone 3 below. No frontend feature work is included.
+
+## Milestone 3 delivery — October 21, 2026
+
+Authentication/account administration is implemented and verified against real PostgreSQL. User chose a fixed 30-day session lifetime and mandatory immediate password changes for initial/bootstrap/reset accounts. The application has exactly two roles and one family instance, without tenancy. `AUTH.md` documents the implemented flows, first-admin CLI, rate limits, revocation, cookie/CSRF and proxy configuration. `mustChangePassword` is a forward schema/contract change; applied migrations were preserved.
+
+The next build milestone is the complete exercise/set/plan domain API and its ownership/concurrency gate. Browser forms and deployment remain later work. No real family admin was bootstrapped without a supplied secret.

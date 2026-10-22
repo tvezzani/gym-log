@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, cp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, cp, writeFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -27,6 +27,11 @@ test(
     const app = new pg.Client({ connectionString: appUrl.href });
     let created = false;
     let temporary = '';
+    let legacyDirectory = '';
+    const migrationFiles = (await readdir('db/migrations')).filter((name) =>
+      /^\d+_.*\.sql$/.test(name),
+    );
+    const migrationCount = migrationFiles.length;
     const run = promisify(execFile);
     const migrate = async (directory = 'db/migrations') =>
       run(
@@ -52,7 +57,65 @@ test(
       await operator.query(`REVOKE ALL ON DATABASE ${database} FROM PUBLIC`);
       await operator.query(`GRANT CONNECT ON DATABASE ${database} TO gym_app`);
       await operator.query('REVOKE ALL ON SCHEMA public FROM PUBLIC');
+
+      // Prove the upgrade preserves existing identities and security state.
+      legacyDirectory = await mkdtemp(join(tmpdir(), 'gym-log-legacy-roles-'));
+      for (const name of migrationFiles.filter(
+        (file) => file !== '1792620000000_rename_roles.sql',
+      ))
+        await cp(join('db/migrations', name), join(legacyDirectory, name));
+      await migrate(legacyDirectory);
+      const legacyUser = randomUUID(),
+        legacyAdmin = randomUUID();
+      const oldHash = '$argon2id$disabled-fixture-not-a-login-hash';
+      await operator.query(
+        "INSERT INTO app.users(id,username,password_hash,role,is_active,time_zone,must_change_password) VALUES($1,'legacy_user',$3,'member',false,'UTC',false),($2,'legacy_admin',$3,'superadmin',false,'UTC',true)",
+        [legacyUser, legacyAdmin, oldHash],
+      );
+      await operator.query(
+        "INSERT INTO app.auth_sessions(user_id,token_hash,csrf_token,expires_at) VALUES($1,$2,$3,statement_timestamp()+interval '30 days')",
+        [legacyUser, 'd'.repeat(64), 'c'.repeat(43)],
+      );
       await migrate();
+      const upgraded = (
+        await operator.query(
+          'SELECT id,role,password_hash,is_active,must_change_password FROM app.users WHERE id=ANY($1::uuid[]) ORDER BY username',
+          [[legacyUser, legacyAdmin]],
+        )
+      ).rows;
+      assert.deepEqual(upgraded, [
+        {
+          id: legacyAdmin,
+          role: 'admin',
+          password_hash: oldHash,
+          is_active: false,
+          must_change_password: true,
+        },
+        {
+          id: legacyUser,
+          role: 'user',
+          password_hash: oldHash,
+          is_active: false,
+          must_change_password: false,
+        },
+      ]);
+      assert.equal(
+        (
+          await operator.query(
+            'SELECT user_id FROM app.auth_sessions WHERE token_hash=$1',
+            ['d'.repeat(64)],
+          )
+        ).rows[0].user_id,
+        legacyUser,
+      );
+      assert.match(
+        (
+          await operator.query(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname='app' AND indexname='users_active_admin'",
+          )
+        ).rows[0].indexdef,
+        /role = 'admin'/,
+      );
       assert.match((await migrate()).stdout, /No migrations to run/);
       assert.equal(
         (
@@ -60,7 +123,7 @@ test(
             'SELECT count(*)::int AS n FROM public.pgmigrations',
           )
         ).rows[0].n,
-        2,
+        migrationCount,
       );
       await app.connect();
       await app.query('BEGIN');
@@ -80,22 +143,26 @@ test(
           await app.query('RELEASE SAVEPOINT invalid_input');
         }
       }
+      for (const legacyRole of ['member', 'superadmin'])
+        await rejected(
+          'INSERT INTO app.users(username,password_hash,role,time_zone) VALUES($1,$2,$3,$4)',
+          ['invalid_role', oldHash, legacyRole, 'UTC'],
+          '23514',
+        );
+      const defaultUser = (
+        await app.query(
+          'INSERT INTO app.users(username,password_hash,time_zone) VALUES($1,$2,$3) RETURNING role',
+          ['default_user', oldHash, 'UTC'],
+        )
+      ).rows[0];
+      assert.equal(defaultUser.role, 'user');
       const alice = randomUUID(),
         bob = randomUUID(),
         exercise = randomUUID();
       const hash = '$argon2id$disabled-fixture-not-a-login-hash';
       await app.query(
         'INSERT INTO app.users(id,username,password_hash,role,time_zone) VALUES ($1,$2,$3,$4,$5),($6,$7,$3,$8,$5)',
-        [
-          alice,
-          'alice',
-          hash,
-          'superadmin',
-          'America/Denver',
-          bob,
-          'bob',
-          'member',
-        ],
+        [alice, 'alice', hash, 'admin', 'America/Denver', bob, 'bob', 'user'],
       );
       await rejected(
         'INSERT INTO app.users(username,password_hash,time_zone) VALUES ($1,$2,$3)',
@@ -294,7 +361,7 @@ test(
       temporary = await mkdtemp(join(tmpdir(), 'gym-log-migrations-'));
       await cp('db/migrations', temporary, { recursive: true });
       await writeFile(
-        join(temporary, '1792612800001_intentional_failure.sql'),
+        join(temporary, '1792620000001_intentional_failure.sql'),
         '-- Up Migration\nCREATE TABLE app.rollback_probe(id integer);\nSELECT 1/0;\n-- Down Migration\nSELECT 1;\n',
       );
       await assert.rejects(
@@ -319,7 +386,7 @@ test(
             'SELECT count(*)::int AS n FROM public.pgmigrations',
           )
         ).rows[0].n,
-        2,
+        migrationCount,
       );
     } finally {
       await app.end();
@@ -327,6 +394,8 @@ test(
       if (created) await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
       await admin.end();
       if (temporary) await rm(temporary, { recursive: true, force: true });
+      if (legacyDirectory)
+        await rm(legacyDirectory, { recursive: true, force: true });
     }
   },
 );

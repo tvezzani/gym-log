@@ -13,9 +13,13 @@ async function main() {
       'Database unavailable; run npm run db:up and npm run db:migrate',
     );
   }
-  const server = createApp().listen(config.PORT, config.HOST, () => {
-    console.log(`API listening on http://${config.HOST}:${config.PORT}`);
-  });
+  const server = createApp({ pool, config }).listen(
+    config.PORT,
+    config.HOST,
+    () => {
+      console.log(`API listening on http://${config.HOST}:${config.PORT}`);
+    },
+  );
   const shutdown = () => {
     const deadline = setTimeout(() => process.exit(1), 10000);
     deadline.unref();

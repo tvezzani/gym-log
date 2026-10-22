@@ -4,9 +4,9 @@ A minimalist, self-hosted gym log for a family. Working title; development scaff
 
 Each workout record is one independent set. Version 1 requires a connection to the Ubuntu server through Tailscale.
 
-Confirmed scope: pounds only, whole-number RPE, private dated plans, shared exercise names with superadmin approval, and admin-managed accounts. Workout history is private through the app; the database owner retains direct database access. Deployment uses Docker Compose.
+Confirmed scope: pounds only, whole-number RPE, private dated plans, shared exercise names with admin approval, and admin-managed accounts. Workout history is private through the app; the database owner retains direct database access. Deployment uses Docker Compose.
 
-Members can log privately against their own pending exercise submissions. Plans use calendar dates without scheduled times. Dumbbell weights follow each user's convention.
+Users can log privately against their own pending exercise submissions. Plans use calendar dates without scheduled times. Dumbbell weights follow each user's convention.
 
 - [Product requirements](docs/PRD.md)
 - [Build checklist](docs/CHECKLIST.md)
@@ -31,7 +31,7 @@ docs/                  PRD, checklist, decisions
 infra/                 Deployment configuration and backup instructions
 ```
 
-The API foundation is runnable. The milestone 2 API contract and domain migrations are in place. Domain endpoints, authentication, and the frontend follow in later milestones. Node 24.22.1 LTS, TypeScript, Express 5, `pg`, Zod, and node-pg-migrate are pinned through package manifests and `package-lock.json`. PostgreSQL 17 uses an immutable image digest in the development Compose file.
+The API foundation is runnable. The milestone 2 API contract and domain migrations are in place. Authentication, account administration and own preferences are implemented. Exercise/set/plan endpoints and the frontend follow in later milestones. Node 24.22.1 LTS, TypeScript, Express 5, `pg`, Zod, and node-pg-migrate are pinned through package manifests and `package-lock.json`. PostgreSQL 17 uses an immutable image digest in the development Compose file.
 
 ## Development in Ubuntu WSL
 
@@ -93,8 +93,16 @@ The baseline migration applied successfully and a second run reported no pending
 
 - `docs/openapi.yaml`: generated OpenAPI 3.1 contract with all v1 endpoint examples.
 - `docs/API-RULES.md`: validation, exercise eligibility, ownership, retry and transaction rules.
-- `docs/API-EXAMPLES.md`: request/read/edit flows; feature endpoints are planned, not implemented yet.
+- `docs/API-EXAMPLES.md`: request/read/edit flows; exercise/set/plan endpoints are planned; auth/account endpoints are implemented.
 - `packages/contracts`: browser-safe runtime schemas and inferred types.
 - `db/README.md`: migration, local fixture, isolated database-test and recovery commands.
 
-Run `npm run docs:generate` after changing contracts, and `npm run check` to detect stale or invalid OpenAPI as well as source issues. Run `npm run test:db` for real schema/permission evidence. Optional local sample data: `npm run db:fixtures -- --confirm-local-fixtures`; accounts stay disabled and have no usable passwords. The next build milestone is authentication/account administration.
+Run `npm run docs:generate` after changing contracts, and `npm run check` to detect stale or invalid OpenAPI as well as source issues. Run `npm run test:db` for real schema/permission evidence. Optional local sample data: `npm run db:fixtures -- --confirm-local-fixtures`; accounts stay disabled and have no usable passwords. Authentication/account administration is implemented; the next build milestone is the complete domain API.
+
+## Authentication and roles
+
+See `docs/AUTH.md` for the first-admin bootstrap command and API workflow. Exactly two application roles exist: user and admin. This is one family instance without tenancy.
+
+Sessions last 30 days, without sliding renewal. New/bootstrap/reset accounts must immediately change their password; `mustChangePassword` exposes the restricted state. Auth/account endpoints include Argon2id hashing, PostgreSQL sessions, CSRF and exact-origin checks, role guards, revocation, rate limits and concurrency-safe last-admin protection. There are no usable default credentials and no browser login form yet.
+
+Configuration now requires a random `AUTH_SECRET` and exact `APP_ORIGIN`; `.env.example` documents them. New `.env` files receive a random secret through setup. Existing files are preserved and must be deliberately extended if missing fields. Docker/API startup commands remain above; production requires HTTPS and explicitly verified proxy configuration. `npm run auth:cleanup` removes expired auth rows. No family account was created automatically during implementation.

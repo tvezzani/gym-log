@@ -105,7 +105,7 @@ function operation(method, path, id, tag, summary, response, options = {}) {
     Object.assign(responses, {
       400: error('Malformed JSON'),
       409: error(
-        'State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict',
+        'State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict',
       ),
       413: error('Request body exceeds 32 KiB'),
       415: error('Unsupported request encoding'),
@@ -236,7 +236,7 @@ operation(
   {
     query: paging,
     notes:
-      'Planned. Shared across authenticated family accounts only. Order lower(name) ASC, id ASC. Names need not be unique. This never includes other members’ pending or rejected exercises.',
+      'Planned. Shared across authenticated family accounts only. Order lower(name) ASC, id ASC. Names need not be unique. This never includes other users’ pending or rejected exercises.',
   },
 );
 operation(
@@ -270,12 +270,12 @@ operation(
   '/exercises/{id}',
   'maintainExercise',
   'Administration',
-  'Superadmin-only rename or archive/unarchive',
+  'Admin-only rename or archive/unarchive',
   'Exercise',
   {
     request: 'ExercisePatch',
     notes:
-      'Planned. Only superadmin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.',
+      'Planned. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.',
   },
 );
 operation(
@@ -283,7 +283,7 @@ operation(
   '/admin/exercises',
   'reviewQueue',
   'Administration',
-  'List submissions for superadmin review',
+  'List submissions for admin review',
   'ExerciseList',
   {
     query: [
@@ -299,7 +299,7 @@ operation(
       ),
     ],
     notes:
-      'Planned. Superadmin only. Order createdAt ASC, id ASC. Admin access does not grant history/plan access.',
+      'Planned. Admin only. Order createdAt ASC, id ASC. Admin access does not grant history/plan access.',
   },
 );
 for (const action of ['approve', 'reject'])
@@ -308,7 +308,7 @@ for (const action of ['approve', 'reject'])
     `/admin/exercises/{id}/${action}`,
     `${action}Exercise`,
     'Administration',
-    `Superadmin ${action}s a pending submission`,
+    `Admin ${action}s a pending submission`,
     'Exercise',
     {
       status: 200,
@@ -333,7 +333,7 @@ operation(
       timeQuery('end', 'Exclusive upper bound'),
     ],
     notes:
-      'Planned. Owner always comes from the session, including superadmin. Order performedAt DESC, id DESC. Latest values: exerciseId + limit=1 + offset=0, with no time bounds. Clients compute local-day boundaries with IANA timezone rules (23/24/25-hour days), not a fixed 24-hour span.',
+      'Planned. Owner always comes from the session, including admin. Order performedAt DESC, id DESC. Latest values: exerciseId + limit=1 + offset=0, with no time bounds. Clients compute local-day boundaries with IANA timezone rules (23/24/25-hour days), not a fixed 24-hour span.',
   },
 );
 operation(
@@ -456,7 +456,7 @@ operation(
   '/admin/users',
   'listAccounts',
   'Administration',
-  'Superadmin lists account summaries',
+  'Admin lists account summaries',
   'AccountList',
   {
     query: paging,
@@ -469,7 +469,7 @@ operation(
   '/admin/users',
   'createAccount',
   'Administration',
-  'Superadmin creates an account',
+  'Admin creates an account',
   'User',
   { request: 'AccountCreate' },
 );
@@ -478,12 +478,12 @@ operation(
   '/admin/users/{id}',
   'updateAccount',
   'Administration',
-  'Superadmin changes role or active state',
+  'Admin changes role or active state',
   'User',
   {
     request: 'AccountPatch',
     notes:
-      'Planned. Disable revokes sessions. Protect the last active superadmin using a common transaction lock, not a count-then-update race. No destructive account deletion.',
+      'Planned. Disable revokes sessions. Protect the last active admin using a common transaction lock, not a count-then-update race. No destructive account deletion.',
   },
 );
 operation(
@@ -491,7 +491,7 @@ operation(
   '/admin/users/{id}/reset-password',
   'resetPassword',
   'Administration',
-  'Superadmin resets a password and revokes sessions',
+  'Admin resets a password and revokes sessions',
   null,
   {
     request: 'AccountReset',
@@ -500,6 +500,71 @@ operation(
       'Planned. Admin supplies the temporary password through this authenticated request; never return it, log it, or include a hash. Forced-change policy is decided before authentication implementation, not silently added here.',
   },
 );
+
+const implemented = new Set([
+  '/health',
+  '/auth/csrf',
+  '/auth/login',
+  '/auth/logout',
+  '/auth/me',
+  '/auth/password',
+  '/preferences',
+  '/admin/users',
+  '/admin/users/{id}',
+  '/admin/users/{id}/reset-password',
+]);
+for (const [path, methods] of Object.entries(paths))
+  for (const [method, op] of Object.entries(methods)) {
+    if (implemented.has(path)) {
+      op.description = op.description.startsWith('Planned endpoint;')
+        ? 'Implemented in milestone 3.'
+        : op.description.replace(/^Planned\./, 'Implemented.');
+      op.description = op.description.replace(
+        'Session lifetime and reset policy are settled before milestone 3.',
+        'Sessions expire after exactly 30 days without sliding renewal. New/bootstrap/reset passwords require an immediate change; user.mustChangePassword describes this restriction.',
+      );
+      op.description = op.description.replace(
+        'Forced-change policy is decided before authentication implementation, not silently added here.',
+        'Sets mustChangePassword=true. The next login permits only reading own auth state, obtaining CSRF, changing the password or signing out until a different password is chosen.',
+      );
+      if (path === '/auth/password')
+        op.description +=
+          ' The new password must differ from the current password. Success clears mustChangePassword and revokes every own session.';
+      if (path === '/admin/users' && method === 'post')
+        op.description += ' The account starts with mustChangePassword=true.';
+      if (path === '/admin/users/{id}' && method === 'patch')
+        op.description +=
+          ' Role changes also revoke the target’s sessions. Exactly two roles exist: user and admin; no tenancy layer.';
+      if (path === '/auth/me')
+        op.description += ' Allowed during a required password change.';
+      if (op.responses[403])
+        op.responses[403].description =
+          'Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed';
+    }
+    if (!['get', 'head'].includes(method))
+      op.parameters.push({
+        name: 'Origin',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uri' },
+        description:
+          'Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.',
+      });
+  }
+paths['/admin/users'].post.responses[201].content['application/json'].example =
+  { ...examples.User, mustChangePassword: true };
+const loginContent =
+  paths['/auth/login'].post.responses[200].content['application/json'];
+delete loginContent.example;
+loginContent.examples = {
+  normal: { value: examples.Auth },
+  passwordChangeRequired: {
+    value: {
+      ...examples.Auth,
+      user: { ...examples.User, mustChangePassword: true },
+    },
+  },
+};
 
 // The shared exercise list must demonstrate an approved row, not a private submission.
 const approved = {
@@ -561,9 +626,9 @@ const document = {
   openapi: '3.1.0',
   info: {
     title: 'Gym Log API',
-    version: '0.1.0',
+    version: '0.2.0',
     description:
-      'Milestone 2 contract. Only health is implemented so far; feature endpoints follow in milestones 3–4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.',
+      'Authentication and account administration are implemented in milestone 3. Exercise, set and plan endpoints follow in milestone 4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.',
   },
   servers: [{ url: '/api/v1' }],
   tags: [

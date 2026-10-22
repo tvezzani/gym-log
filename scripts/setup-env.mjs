@@ -7,7 +7,8 @@ const template = await readFile(
 );
 const content = template
   .replaceAll('REPLACE_OPERATOR_PASSWORD', randomBytes(24).toString('hex'))
-  .replaceAll('REPLACE_APP_PASSWORD', randomBytes(24).toString('hex'));
+  .replaceAll('REPLACE_APP_PASSWORD', randomBytes(24).toString('hex'))
+  .replaceAll('REPLACE_AUTH_SECRET', randomBytes(32).toString('hex'));
 try {
   await writeFile(new URL('../.env', import.meta.url), content, {
     flag: 'wx',

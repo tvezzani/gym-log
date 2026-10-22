@@ -1,8 +1,8 @@
 # API examples
 
-These illustrate the milestone 2 contract; feature endpoints are implemented in milestones 3–4. Every operation also has typed request/response examples in `openapi.yaml`, generated from `packages/contracts/src/examples.ts` and checked against runtime schemas. IDs below are synthetic. Passwords shown in OpenAPI are examples, never installed credentials.
+Authentication, account administration and own preferences are implemented in milestone 3. The exercise/set/plan examples below describe milestone 4 endpoints. Every operation also has typed request/response examples in `openapi.yaml`, generated from `packages/contracts/src/examples.ts` and checked against runtime schemas. IDs below are synthetic. Passwords shown in OpenAPI are examples, never installed credentials.
 
-Authenticate with `/auth/csrf` and `/auth/login`, retaining the cookie and returned CSRF token. Authenticated writes require `X-CSRF-Token` and the session cookie. Owner identity is never supplied in JSON.
+Authenticate with `/auth/csrf` and `/auth/login`, retaining the cookie and returned CSRF token. Authenticated writes require `Origin`, `X-CSRF-Token` and the session cookie. Owner identity is never supplied in JSON.
 
 ## Submit a name and use it while pending
 
@@ -12,7 +12,7 @@ Authenticate with `/auth/csrf` and `/auth/login`, retaining the cookie and retur
 { "name": "Barbell squat" }
 ```
 
-201 returns an exercise with a server UUID, `status: "pending"`, the session user as `submittedBy`, and null review/archival metadata. GET `/exercise-submissions` lists it for its owner. Until admin approval it is absent from `/exercises` and unavailable to other members. PATCH `/exercises/{id}` is admin-only, including name changes. Approve/reject via the documented admin routes; approval preserves the ID.
+201 returns an exercise with a server UUID, `status: "pending"`, the session user as `submittedBy`, and null review/archival metadata. GET `/exercise-submissions` lists it for its owner. Until admin approval it is absent from `/exercises` and unavailable to other users. PATCH `/exercises/{id}` is admin-only, including name changes. Approve/reject via the documented admin routes; approval preserves the ID.
 
 ## Create, read, and edit an independent set
 
@@ -58,9 +58,9 @@ The date remains `2026-10-21` after timezone changes. Notes are not parsed and n
 
 ## Account creation/reset and preferences
 
-Admin POST `/admin/users` requires canonical username, a supplied password, an initial IANA `timeZone`, and optional role (member by default). It returns a shaped User object (201), never the password/hash. Admin PATCH `/admin/users/{id}` with `{"isActive":false}` disables/revokes sessions and returns User (200). Admin POST `/admin/users/{id}/reset-password` with a supplied `temporaryPassword` returns 204 and revokes sessions; it never returns credentials. Member calls to admin routes return 403. The last active superadmin is protected.
+Admin POST `/admin/users` requires canonical username, a supplied password, an initial IANA `timeZone`, and optional role (user by default). It returns a shaped User object (201), never the password/hash. Admin PATCH `/admin/users/{id}` with `{"isActive":false}` disables/revokes sessions and returns User (200). Admin POST `/admin/users/{id}/reset-password` with a supplied `temporaryPassword` returns 204 and revokes sessions; it never returns credentials. User calls to admin routes return 403. The last active admin is protected.
 
-PATCH `/preferences` with `{"timeZone":"America/Denver"}` returns the caller's updated User object. GET `/auth/me` returns the user and CSRF token. PATCH `/auth/password` takes current/new password, returns 204, and requires logging in again. Session lifetime and temporary-password forced-change policy are decided before milestone 3.
+PATCH `/preferences` with `{"timeZone":"America/Denver"}` returns the caller's updated User object. GET `/auth/me` returns the user and CSRF token. PATCH `/auth/password` takes current/new password, returns 204, and requires logging in again. Sessions last 30 days without sliding renewal. New/bootstrap/reset accounts must change their password immediately; `mustChangePassword` is returned in User. See `AUTH.md`.
 
 ## Field validation
 

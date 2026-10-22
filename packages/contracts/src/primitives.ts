@@ -75,7 +75,7 @@ export const timeZoneSchema = z
   .describe(
     'IANA timezone supported by the server; UTC is allowed. Stored explicitly, never changed automatically while traveling.',
   );
-export const roleSchema = z.enum(['member', 'superadmin']);
+export const roleSchema = z.enum(['user', 'admin']);
 export const exerciseStatusSchema = z.enum(['pending', 'approved', 'rejected']);
 export const paginationQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -92,6 +92,7 @@ export const apiErrorSchema = z.strictObject({
     code: z.enum([
       'VALIDATION_ERROR',
       'UNAUTHENTICATED',
+      'PASSWORD_CHANGE_REQUIRED',
       'FORBIDDEN',
       'NOT_FOUND',
       'CONFLICT',

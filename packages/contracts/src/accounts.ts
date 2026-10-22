@@ -15,6 +15,7 @@ export const userSchema = z.strictObject({
   username: usernameSchema,
   role: roleSchema,
   isActive: z.boolean(),
+  mustChangePassword: z.boolean(),
   timeZone: timeZoneSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
@@ -27,14 +28,19 @@ export const loginSchema = z.strictObject({
   username: usernameSchema,
   password: z.string().min(1).max(128),
 });
-export const passwordChangeSchema = z.strictObject({
-  currentPassword: z.string().min(1).max(128),
-  newPassword: passwordSchema,
-});
+export const passwordChangeSchema = z
+  .strictObject({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: passwordSchema,
+  })
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    message: 'Choose a different password',
+    path: ['newPassword'],
+  });
 export const accountCreateSchema = z.strictObject({
   username: usernameSchema,
   password: passwordSchema,
-  role: roleSchema.default('member'),
+  role: roleSchema.default('user'),
   timeZone: timeZoneSchema,
 });
 export const accountPatchSchema = z

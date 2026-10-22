@@ -33,9 +33,9 @@ try {
   await client.connect();
   await client.query('BEGIN');
   for (const [id, username, role] of [
-    [ids.admin, 'fixture_admin', 'superadmin'],
-    [ids.alice, 'fixture_alice', 'member'],
-    [ids.bob, 'fixture_bob', 'member'],
+    [ids.admin, 'fixture_admin', 'admin'],
+    [ids.alice, 'fixture_alice', 'user'],
+    [ids.bob, 'fixture_bob', 'user'],
   ]) {
     await client.query(
       'INSERT INTO app.users(id,username,password_hash,role,is_active,time_zone) VALUES($1,$2,$3,$4,false,$5) ON CONFLICT(id) DO NOTHING',

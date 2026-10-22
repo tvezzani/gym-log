@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Gym Log API
-  version: 0.1.0
-  description: Milestone 2 contract. Only health is implemented so far; feature endpoints follow in milestones 3–4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.
+  version: 0.2.0
+  description: Authentication and account administration are implemented in milestone 3. Exercise, set and plan endpoints follow in milestone 4. Family-private shared catalog; owner-private sets/plans. All writes require the server. API-RULES.md documents cross-field, ownership, eligibility, and concurrency rules beyond JSON Schema.
 servers:
   - url: /api/v1
 tags:
@@ -47,7 +47,7 @@ paths:
       tags:
         - Authentication
       summary: Obtain a CSRF token
-      description: 'Planned. Sets an opaque signed pre-login context cookie when unauthenticated; after login returns the session CSRF token. Same-origin only; Cache-Control: no-store.'
+      description: 'Implemented. Sets an opaque signed pre-login context cookie when unauthenticated; after login returns the session CSRF token. Same-origin only; Cache-Control: no-store.'
       security: []
       responses:
         '200':
@@ -84,7 +84,7 @@ paths:
       tags:
         - Authentication
       summary: Log in and rotate the opaque session
-      description: Planned. Requires the pre-login CSRF cookie/token and same-origin check. Canonical lowercase username; password is untouched. Sets the HttpOnly session cookie; returns no session secret or hash. Session lifetime and reset policy are settled before milestone 3.
+      description: Implemented. Requires the pre-login CSRF cookie/token and same-origin check. Canonical lowercase username; password is untouched. Sets the HttpOnly session cookie; returns no session secret or hash. Sessions expire after exactly 30 days without sliding renewal. New/bootstrap/reset passwords require an immediate change; user.mustChangePassword describes this restriction.
       security:
         - csrf: []
       responses:
@@ -94,16 +94,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Auth'
-              example: &a1
-                user: &a3
-                  id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
-                  username: alex
-                  role: member
-                  isActive: true
-                  timeZone: America/Denver
-                  createdAt: 2026-10-21T18:34:56.123Z
-                  updatedAt: 2026-10-21T18:34:56.123Z
-                csrfToken: ccccccccccccccccccccccccccccccccccccccccccc
+              examples:
+                normal:
+                  value: &a1
+                    user: &a3
+                      id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                      username: alex
+                      role: user
+                      isActive: true
+                      mustChangePassword: false
+                      timeZone: America/Denver
+                      createdAt: 2026-10-21T18:34:56.123Z
+                      updatedAt: 2026-10-21T18:34:56.123Z
+                    csrfToken: ccccccccccccccccccccccccccccccccccccccccccc
+                passwordChangeRequired:
+                  value:
+                    user:
+                      id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                      username: alex
+                      role: user
+                      isActive: true
+                      mustChangePassword: true
+                      timeZone: America/Denver
+                      createdAt: 2026-10-21T18:34:56.123Z
+                      updatedAt: 2026-10-21T18:34:56.123Z
+                    csrfToken: ccccccccccccccccccccccccccccccccccccccccccc
         '400':
           description: Malformed JSON
           content:
@@ -125,7 +140,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Invalid username/password or disabled account; use one generic message
         '403':
-          description: Invalid CSRF context or origin
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -133,9 +148,9 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Invalid CSRF context or origin
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -143,7 +158,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -205,6 +220,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -220,7 +242,7 @@ paths:
       tags:
         - Authentication
       summary: Revoke the current session and clear its cookie
-      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      description: Implemented in milestone 3.
       security:
         - session: []
           csrf: []
@@ -248,7 +270,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -256,7 +278,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -268,7 +290,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -276,7 +298,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -315,13 +337,20 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /auth/me:
     get:
       operationId: me
       tags:
         - Authentication
       summary: Read own account and CSRF token
-      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      description: Implemented in milestone 3. Allowed during a required password change.
       security:
         - session: []
       responses:
@@ -343,7 +372,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -351,7 +380,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -378,7 +407,7 @@ paths:
       tags:
         - Authentication
       summary: Change own password and revoke existing sessions
-      description: Planned. Verify current password; revoke all own sessions including the current one. The caller logs in again. No password/hash is returned.
+      description: Implemented. Verify current password; revoke all own sessions including the current one. The caller logs in again. No password/hash is returned. The new password must differ from the current password. Success clears mustChangePassword and revokes every own session.
       security:
         - session: []
           csrf: []
@@ -406,7 +435,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -414,7 +443,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -426,7 +455,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -434,7 +463,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -480,6 +509,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -495,7 +531,7 @@ paths:
       tags:
         - Accounts
       summary: Change own explicit history timezone
-      description: Planned. A stored IANA timezone groups performed instants. Plans remain unchanged calendar dates. Never follow phone timezone changes automatically.
+      description: Implemented. A stored IANA timezone groups performed instants. Plans remain unchanged calendar dates. Never follow phone timezone changes automatically.
       security:
         - session: []
           csrf: []
@@ -528,7 +564,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -536,7 +572,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -548,7 +584,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -556,7 +592,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -602,6 +638,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -616,7 +659,7 @@ paths:
       tags:
         - Exercises
       summary: List approved, unarchived shared exercises
-      description: Planned. Shared across authenticated family accounts only. Order lower(name) ASC, id ASC. Names need not be unique. This never includes other members’ pending or rejected exercises.
+      description: Planned. Shared across authenticated family accounts only. Order lower(name) ASC, id ASC. Names need not be unique. This never includes other users’ pending or rejected exercises.
       security:
         - session: []
       responses:
@@ -777,7 +820,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -785,7 +828,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -831,6 +874,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -914,8 +964,8 @@ paths:
       operationId: maintainExercise
       tags:
         - Administration
-      summary: Superadmin-only rename or archive/unarchive
-      description: Planned. Only superadmin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.
+      summary: Admin-only rename or archive/unarchive
+      description: Planned. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.
       security:
         - session: []
           csrf: []
@@ -968,7 +1018,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -976,7 +1026,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -1029,6 +1079,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -1042,8 +1099,8 @@ paths:
       operationId: reviewQueue
       tags:
         - Administration
-      summary: List submissions for superadmin review
-      description: Planned. Superadmin only. Order createdAt ASC, id ASC. Admin access does not grant history/plan access.
+      summary: List submissions for admin review
+      description: Planned. Admin only. Order createdAt ASC, id ASC. Admin access does not grant history/plan access.
       security:
         - session: []
       responses:
@@ -1120,7 +1177,7 @@ paths:
       operationId: approveExercise
       tags:
         - Administration
-      summary: Superadmin approves a pending submission
+      summary: Admin approves a pending submission
       description: Planned. Only pending entries can be reviewed; lock the exercise row. Record reviewer and server timestamp. Approval shares the stable exercise ID. No rejection-reason field.
       security:
         - session: []
@@ -1174,7 +1231,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -1182,7 +1239,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -1235,12 +1292,19 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /admin/exercises/{id}/reject:
     post:
       operationId: rejectExercise
       tags:
         - Administration
-      summary: Superadmin rejects a pending submission
+      summary: Admin rejects a pending submission
       description: Planned. Only pending entries can be reviewed; lock the exercise row. Record reviewer and server timestamp. Rejection preserves old sets/plans but prevents new selection. No rejection-reason field.
       security:
         - session: []
@@ -1303,7 +1367,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -1311,7 +1375,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -1364,13 +1428,20 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /workouts:
     get:
       operationId: listWorkouts
       tags:
         - Sets
       summary: List only own independent sets
-      description: 'Planned. Owner always comes from the session, including superadmin. Order performedAt DESC, id DESC. Latest values: exerciseId + limit=1 + offset=0, with no time bounds. Clients compute local-day boundaries with IANA timezone rules (23/24/25-hour days), not a fixed 24-hour span.'
+      description: 'Planned. Owner always comes from the session, including admin. Order performedAt DESC, id DESC. Latest values: exerciseId + limit=1 + offset=0, with no time bounds. Clients compute local-day boundaries with IANA timezone rules (23/24/25-hour days), not a fixed 24-hour span.'
       security:
         - session: []
       responses:
@@ -1540,7 +1611,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -1548,7 +1619,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '410':
           description: Original set was deleted; retry identity is retained and cannot recreate it
           content:
@@ -1604,6 +1675,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -1748,7 +1826,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -1756,7 +1834,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -1809,6 +1887,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -1870,7 +1955,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -1878,7 +1963,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -1931,6 +2016,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /planned-exercises:
     get:
       operationId: listPlans
@@ -2077,7 +2169,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2085,7 +2177,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2131,6 +2223,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2200,7 +2299,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2208,7 +2307,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2261,6 +2360,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2322,7 +2428,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2330,7 +2436,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2383,6 +2489,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /planned-exercises/order:
     put:
       operationId: reorderPlans
@@ -2437,7 +2550,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2445,7 +2558,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2491,6 +2604,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2506,8 +2626,8 @@ paths:
       operationId: listAccounts
       tags:
         - Administration
-      summary: Superadmin lists account summaries
-      description: Planned. Order username ASC, id ASC. Deliberately shaped summaries exclude password hashes and sessions; do not join other users’ sets/plans.
+      summary: Admin lists account summaries
+      description: Implemented. Order username ASC, id ASC. Deliberately shaped summaries exclude password hashes and sessions; do not join other users’ sets/plans.
       security:
         - session: []
       responses:
@@ -2532,7 +2652,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -2540,7 +2660,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -2575,8 +2695,8 @@ paths:
       operationId: createAccount
       tags:
         - Administration
-      summary: Superadmin creates an account
-      description: Planned endpoint; milestone 2 defines the contract. Implementation follows in milestones 3 and 4.
+      summary: Admin creates an account
+      description: Implemented in milestone 3. The account starts with mustChangePassword=true.
       security:
         - session: []
           csrf: []
@@ -2587,7 +2707,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
-              example: *a3
+              example:
+                id: a3b65f0f-fc21-4fe8-81a4-bc9e1ecc0001
+                username: alex
+                role: user
+                isActive: true
+                mustChangePassword: true
+                timeZone: America/Denver
+                createdAt: 2026-10-21T18:34:56.123Z
+                updatedAt: 2026-10-21T18:34:56.123Z
         '400':
           description: Malformed JSON
           content:
@@ -2609,7 +2737,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -2617,7 +2745,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -2629,7 +2757,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2637,7 +2765,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2683,6 +2811,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2693,14 +2828,14 @@ paths:
               username: alex
               password: Example-only-long-password!
               timeZone: America/Denver
-              role: member
+              role: user
   /admin/users/{id}:
     patch:
       operationId: updateAccount
       tags:
         - Administration
-      summary: Superadmin changes role or active state
-      description: Planned. Disable revokes sessions. Protect the last active superadmin using a common transaction lock, not a count-then-update race. No destructive account deletion.
+      summary: Admin changes role or active state
+      description: 'Implemented. Disable revokes sessions. Protect the last active admin using a common transaction lock, not a count-then-update race. No destructive account deletion. Role changes also revoke the target’s sessions. Exactly two roles exist: user and admin; no tenancy layer.'
       security:
         - session: []
           csrf: []
@@ -2733,7 +2868,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -2741,7 +2876,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -2753,7 +2888,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2761,7 +2896,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2814,6 +2949,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2827,8 +2969,8 @@ paths:
       operationId: resetPassword
       tags:
         - Administration
-      summary: Superadmin resets a password and revokes sessions
-      description: Planned. Admin supplies the temporary password through this authenticated request; never return it, log it, or include a hash. Forced-change policy is decided before authentication implementation, not silently added here.
+      summary: Admin resets a password and revokes sessions
+      description: Implemented. Admin supplies the temporary password through this authenticated request; never return it, log it, or include a hash. Sets mustChangePassword=true. The next login permits only reading own auth state, obtaining CSRF, changing the password or signing out until a different password is chosen.
       security:
         - session: []
           csrf: []
@@ -2856,7 +2998,7 @@ paths:
                   code: UNAUTHENTICATED
                   message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
         '403':
-          description: Role or CSRF denial
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
           content:
             application/json:
               schema:
@@ -2864,7 +3006,7 @@ paths:
               example:
                 error:
                   code: FORBIDDEN
-                  message: Role or CSRF denial
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
         '404':
           description: Unknown or inaccessible resource; do not disclose another owner
           content:
@@ -2876,7 +3018,7 @@ paths:
                   code: NOT_FOUND
                   message: Unknown or inaccessible resource; do not disclose another owner
         '409':
-          description: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
           content:
             application/json:
               schema:
@@ -2884,7 +3026,7 @@ paths:
               example:
                 error:
                   code: CONFLICT
-                  message: State conflict; includes last active superadmin protection, exercise eligibility, or retry-ID conflict
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
         '413':
           description: Request body exceeds 32 KiB
           content:
@@ -2937,6 +3079,13 @@ paths:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
           description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
       requestBody:
         required: true
         content:
@@ -2977,6 +3126,7 @@ components:
               enum:
                 - VALIDATION_ERROR
                 - UNAUTHENTICATED
+                - PASSWORD_CHANGE_REQUIRED
                 - FORBIDDEN
                 - NOT_FOUND
                 - CONFLICT
@@ -3023,9 +3173,11 @@ components:
         role:
           type: string
           enum:
-            - member
-            - superadmin
+            - user
+            - admin
         isActive:
+          type: boolean
+        mustChangePassword:
           type: boolean
         timeZone:
           type: string
@@ -3048,6 +3200,7 @@ components:
         - username
         - role
         - isActive
+        - mustChangePassword
         - timeZone
         - createdAt
         - updatedAt
@@ -3081,9 +3234,11 @@ components:
             role:
               type: string
               enum:
-                - member
-                - superadmin
+                - user
+                - admin
             isActive:
+              type: boolean
+            mustChangePassword:
               type: boolean
             timeZone:
               type: string
@@ -3106,6 +3261,7 @@ components:
             - username
             - role
             - isActive
+            - mustChangePassword
             - timeZone
             - createdAt
             - updatedAt
@@ -3158,11 +3314,11 @@ components:
           maxLength: 128
           description: 12–128 characters; never trimmed or normalized. No default password.
         role:
-          default: member
+          default: user
           type: string
           enum:
-            - member
-            - superadmin
+            - user
+            - admin
         timeZone:
           type: string
           minLength: 1
@@ -3180,8 +3336,8 @@ components:
         role:
           type: string
           enum:
-            - member
-            - superadmin
+            - user
+            - admin
         isActive:
           type: boolean
       additionalProperties: false
@@ -3229,9 +3385,11 @@ components:
               role:
                 type: string
                 enum:
-                  - member
-                  - superadmin
+                  - user
+                  - admin
               isActive:
+                type: boolean
+              mustChangePassword:
                 type: boolean
               timeZone:
                 type: string
@@ -3254,6 +3412,7 @@ components:
               - username
               - role
               - isActive
+              - mustChangePassword
               - timeZone
               - createdAt
               - updatedAt
