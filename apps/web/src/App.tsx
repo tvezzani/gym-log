@@ -18,6 +18,7 @@ import { Login, PasswordChange } from './Auth';
 import { Brand, Icon, Modal, Notice } from './components';
 import { Calendar } from './Calendar';
 import { Composer } from './Composer';
+import { AddExercise, type ExerciseDraft } from './AddExercise';
 import { type Draft, makeDraft } from './draft';
 import {
   todayIn,
@@ -56,6 +57,11 @@ export function App() {
     [confirmDelete, setConfirmDelete] = useState(false),
     [actionError, setActionError] = useState(''),
     [notice, setNotice] = useState('');
+  const [exerciseDraft, setExerciseDraft] = useState<ExerciseDraft | null>(
+      null,
+    ),
+    [exerciseOpen, setExerciseOpen] = useState(false),
+    [returnToComposer, setReturnToComposer] = useState(false);
   const acceptUser = useCallback((next: User) => {
     setRows([]);
     setPlans([]);
@@ -79,7 +85,7 @@ export function App() {
       setLoginNote(
         e.code === 'PASSWORD_CHANGE_REQUIRED'
           ? 'Change your password before continuing.'
-          : 'Your session ended. Log in again; your unsaved set is still here.',
+          : 'Your session ended. Log in again; your unsaved values are still here.',
       );
       setUser((old) =>
         e.code === 'PASSWORD_CHANGE_REQUIRED' && old
@@ -87,6 +93,7 @@ export function App() {
           : null,
       );
       setComposer(false);
+      setExerciseOpen(false);
       setSelected(null);
     };
     async function restore() {
@@ -207,13 +214,13 @@ export function App() {
     view,
   ]);
   useEffect(() => {
-    if (!draft) return;
+    if (!draft && !exerciseDraft) return;
     const prevent = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
     window.addEventListener('beforeunload', prevent);
     return () => window.removeEventListener('beforeunload', prevent);
-  }, [draft]);
+  }, [draft, exerciseDraft]);
   function newDraft(source?: Workout, edit = false, exerciseId = '') {
     if (!user) return;
     if (draft) {
@@ -236,6 +243,48 @@ export function App() {
     );
     setSelected(null);
     setComposer(true);
+  }
+  function openAddExercise(fromComposer = false) {
+    if (!user || (draft && draft.phase !== 'editing')) return;
+    setExerciseDraft(
+      (current) =>
+        current ?? { ownerId: user.id, name: '', error: '', saving: false },
+    );
+    setReturnToComposer(fromComposer);
+    setComposer(false);
+    setSelected(null);
+    setExerciseOpen(true);
+  }
+  function closeAddExercise() {
+    setExerciseDraft(null);
+    setExerciseOpen(false);
+    setComposer(returnToComposer && !!draft);
+    setRefresh((n) => n + 1);
+  }
+  function exerciseAdded(exercise: Exercise) {
+    if (!user) return;
+    setExercises((current) =>
+      [...new Map([...current, exercise].map((e) => [e.id, e])).values()].sort(
+        (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+      ),
+    );
+    setExerciseDraft(null);
+    setExerciseOpen(false);
+    setRefresh((n) => n + 1);
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            fields: { ...current.fields, exerciseId: exercise.id },
+            error: '',
+            fieldErrors: [],
+          }
+        : makeDraft(user.id, user.timeZone, activeDate, exercise.id),
+    );
+    setComposer(true);
+    setNotice(
+      `${exercise.name} added. Ready for your private log; sharing awaits admin approval.`,
+    );
   }
   function saved(row: Workout, recovered = false) {
     setDraft(null);
@@ -292,7 +341,7 @@ export function App() {
     }
   }
   async function logout() {
-    if (draft) {
+    if (draft || exerciseDraft) {
       setNotice('Finish or discard your draft before logging out.');
       setMenu(false);
       return;
@@ -346,7 +395,7 @@ export function App() {
     return (
       <Login
         key={expected}
-        expected={draft ? expected : ''}
+        expected={draft || exerciseDraft ? expected : ''}
         note={loginNote}
         onLogin={acceptUser}
       />
@@ -530,6 +579,24 @@ export function App() {
             )}
           </div>
         )}
+        {exerciseDraft && !exerciseOpen && (
+          <div className="draft-banner">
+            <div>
+              <strong>Unsaved exercise</strong>
+              <p className="fine muted">
+                Your exercise name is kept while you log in.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setComposer(false);
+                setExerciseOpen(true);
+              }}
+            >
+              Resume exercise
+            </button>
+          </div>
+        )}
         {catalogError && (
           <Notice error>
             Exercise list unavailable. {catalogError}{' '}
@@ -604,10 +671,19 @@ export function App() {
             )}
             <div className="section-label">
               <h2>{view === 'today' ? 'Your sets' : 'Logged sets'}</h2>
-              <span className="count">
-                {rows.length}
-                {hasMore ? '+' : ''}
-              </span>
+              <div className="section-actions">
+                <span className="count">
+                  {rows.length}
+                  {hasMore ? '+' : ''}
+                </span>
+                <button
+                  className="text-button"
+                  onClick={() => openAddExercise()}
+                  disabled={!!draft && draft.phase !== 'editing'}
+                >
+                  <Icon name="plus" /> Add new exercise
+                </button>
+              </div>
             </div>
             {!rows.length && !loadError ? (
               <section className="empty">
@@ -627,8 +703,8 @@ export function App() {
                 </button>
                 {!exercises.length && !catalogError && (
                   <p className="fine muted">
-                    No available exercises yet. Ask your admin to add an
-                    approved exercise.
+                    Add a new exercise to start logging. You can use it
+                    privately while it awaits approval.
                   </p>
                 )}
               </section>
@@ -743,7 +819,16 @@ export function App() {
           setDraft={setDraft}
           exercises={exercises}
           onSaved={saved}
+          onAddExercise={() => openAddExercise(true)}
           onClose={() => setComposer(false)}
+        />
+      )}
+      {exerciseOpen && exerciseDraft && exerciseDraft.ownerId === user.id && (
+        <AddExercise
+          draft={exerciseDraft}
+          onChange={setExerciseDraft}
+          onAdded={exerciseAdded}
+          onClose={closeAddExercise}
         />
       )}
       {selected && (

@@ -531,6 +531,188 @@ test(
         },
       );
       await scenario(
+        'add a named exercise from the log and use it privately immediately',
+        async () => {
+          await page
+            .getByRole('button', { name: 'Today', exact: true })
+            .click();
+          await page
+            .getByRole('button', { name: 'Add new exercise', exact: true })
+            .click();
+          await expect(
+            page.getByRole('dialog', { name: 'Add new exercise' }),
+          ).toBeVisible();
+          await expect(
+            page.getByLabel('Exercise name', { exact: true }),
+          ).toBeFocused();
+          await page
+            .getByLabel('Exercise name', { exact: true })
+            .fill('  Cable lateral raise  ');
+          await noOverflow(page);
+          await page.screenshot({ path: `${screenshots}/add-exercise.png` });
+          await page
+            .getByRole('button', { name: 'Add exercise', exact: true })
+            .click();
+          await expect(
+            page.getByRole('dialog', { name: 'Log a set' }),
+          ).toBeVisible();
+          const created = (
+            await operator.query(
+              'SELECT id,status,submitted_by FROM app.exercises WHERE name=$1',
+              ['Cable lateral raise'],
+            )
+          ).rows;
+          assert.equal(created.length, 1);
+          assert.equal(created[0].status, 'pending');
+          assert.equal(created[0].submitted_by, user.id);
+          await expect(
+            page.getByLabel('Exercise', { exact: true }),
+          ).toHaveValue(created[0].id);
+          await expect(
+            page.getByText(
+              'Your pending exercise stays private until approval.',
+            ),
+          ).toBeVisible();
+          const shared = await (
+            await context.request.get(`${config.APP_ORIGIN}/api/v1/exercises`)
+          ).json();
+          assert.ok(
+            !shared.items.some((e: { id: string }) => e.id === created[0].id),
+          );
+          const before = await rowCount();
+          await page.getByLabel('Weight (lbs)', { exact: true }).fill('12.5');
+          await page.getByLabel('Reps', { exact: true }).fill('15');
+          await page
+            .getByRole('button', { name: 'Save set', exact: true })
+            .click();
+          await expect(page.getByRole('dialog')).toHaveCount(0);
+          assert.equal(await rowCount(), before + 1);
+          await page.reload();
+          await expect(
+            page.getByRole('button', {
+              name: 'Set 1, 12.5 pounds, 15 reps, RPE 5',
+            }),
+          ).toBeVisible();
+        },
+      );
+      await scenario(
+        'exercise creation preserves a set draft through validation, cancellation and expired login',
+        async () => {
+          await open();
+          await fields('115', '8');
+          await page.getByLabel('Set number').fill('6');
+          await page.getByLabel('RPE (1–10)').fill('8');
+          const performed = await page.getByLabel('Performed at').inputValue();
+          await page
+            .getByRole('dialog', { name: 'Log a set' })
+            .getByRole('button', { name: 'Add new exercise', exact: true })
+            .click();
+          await page.getByLabel('Exercise name', { exact: true }).fill('   ');
+          await page
+            .getByRole('button', { name: 'Add exercise', exact: true })
+            .click();
+          await expect(page.getByRole('alert')).toContainText(
+            'Enter an exercise name',
+          );
+          await page
+            .getByRole('button', { name: 'Cancel', exact: true })
+            .click();
+          await expect(
+            page.getByRole('dialog', { name: 'Log a set' }),
+          ).toBeVisible();
+          await expect(
+            page.getByLabel('Weight (lbs)', { exact: true }),
+          ).toHaveValue('115');
+          await page
+            .getByRole('dialog', { name: 'Log a set' })
+            .getByRole('button', { name: 'Add new exercise', exact: true })
+            .click();
+          await page
+            .getByLabel('Exercise name', { exact: true })
+            .fill('Seated cable row');
+          await page.route('**/api/v1/exercises', async (route) => {
+            if (route.request().method() === 'POST')
+              await route.fulfill({
+                status: 422,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                  error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'Please check the exercise name',
+                  },
+                }),
+              });
+            else await route.continue();
+          });
+          await page
+            .getByRole('button', { name: 'Add exercise', exact: true })
+            .click();
+          await expect(page.getByRole('alert')).toContainText(
+            'check the exercise name',
+          );
+          await expect(
+            page.getByLabel('Exercise name', { exact: true }),
+          ).toHaveValue('Seated cable row');
+          await page.unroute('**/api/v1/exercises');
+          await operator.query(
+            'UPDATE app.auth_sessions SET revoked_at=statement_timestamp() WHERE user_id=$1',
+            [user.id],
+          );
+          await page
+            .getByRole('button', { name: 'Add exercise', exact: true })
+            .click();
+          await expect(
+            page.getByRole('heading', { name: 'Let’s get to work.' }),
+          ).toBeVisible();
+          await page.getByLabel('Password', { exact: true }).fill(password);
+          await page
+            .getByRole('button', { name: 'Log in', exact: true })
+            .click();
+          await page
+            .getByRole('button', { name: 'Resume exercise', exact: true })
+            .click();
+          await expect(
+            page.getByLabel('Exercise name', { exact: true }),
+          ).toHaveValue('Seated cable row');
+          let submissions = 0;
+          await page.route('**/api/v1/exercises', async (route) => {
+            if (route.request().method() === 'POST') submissions++;
+            await route.continue();
+          });
+          await page.locator('form.add-exercise-form').evaluate((node) => {
+            (node as HTMLFormElement).requestSubmit();
+            (node as HTMLFormElement).requestSubmit();
+          });
+          await expect(
+            page.getByRole('dialog', { name: 'Log a set' }),
+          ).toBeVisible();
+          assert.equal(submissions, 1);
+          await page.unroute('**/api/v1/exercises');
+          const created = (
+            await operator.query('SELECT id FROM app.exercises WHERE name=$1', [
+              'Seated cable row',
+            ])
+          ).rows;
+          assert.equal(created.length, 1);
+          await expect(
+            page.getByLabel('Exercise', { exact: true }),
+          ).toHaveValue(created[0].id);
+          await expect(
+            page.getByLabel('Weight (lbs)', { exact: true }),
+          ).toHaveValue('115');
+          await expect(page.getByLabel('Reps', { exact: true })).toHaveValue(
+            '8',
+          );
+          await expect(page.getByLabel('Set number')).toHaveValue('6');
+          await expect(page.getByLabel('RPE (1–10)')).toHaveValue('8');
+          await expect(page.getByLabel('Performed at')).toHaveValue(performed);
+          await page
+            .getByRole('button', { name: 'Save set', exact: true })
+            .click();
+          await expect(page.getByRole('dialog')).toHaveCount(0);
+        },
+      );
+      await scenario(
         'mobile and desktop layout, accessible dialog focus and short viewport save reachability',
         async () => {
           await page

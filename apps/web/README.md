@@ -21,11 +21,12 @@ For a different web origin, set `WEB_ORIGIN` for `dev:api` and adjust Vite's hos
 - First-run admin creation, cookie/CSRF login, restored sessions, forced temporary-password change, own password change and logout.
 - Today, stored-timezone day navigation, year/month/day date picker and exercise-filtered history with bounded paging.
 - Approved exercises and own pending exercises, last recorded values, explicit saves, decimal pounds, whole RPE and fresh set 1/RPE 5.
+- Add new exercise from the log or set form by name. The pending exercise is selected immediately for private logging; creating/cancelling it preserves an existing set draft.
 - Copy as next set with review before save, a new UUID/time and incremented set number; set edit and deliberate delete.
 - Editable backdated instants, milliseconds, DST-aware day bounds, rejected nonexistent local times and an occurrence selector for repeated clock times.
 - In-memory draft recovery across navigation and reauthentication. One frozen create UUID/payload survives uncertain responses and further retry failures. Resolve it through the same POST or by reading the current saved record before editing another submission. Deletion is acknowledged explicitly; retries cannot resurrect it.
 - Native modal focus management, labeled inputs, suitable input modes, touch targets, visual-viewport-aware scrolling and sticky Save controls.
-- Read-only display of today's existing plans with Log set prefills. Plan editing, timezone preferences, exercise submission/review and account administration screens belong to milestone 6.
+- Read-only display of today's existing plans with Log set prefills. Plan editing, timezone preferences, exercise status/review and account administration screens belong to milestone 6.
 
 There is no offline queue or local storage of workouts/passwords. Drafts survive within the running page, not reloads or browser restarts. A best-effort unload prompt protects an unsaved draft. Reauthentication is restricted to the draft owner's username until that draft is resolved/discarded; logging out is blocked while a draft exists.
 

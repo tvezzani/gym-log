@@ -9,18 +9,20 @@ import {
 import { api, ApiError, message } from './api';
 import { type Draft, createPayload } from './draft';
 import { repeatedTime, timeLabel } from './time';
-import { Modal, Notice } from './components';
+import { Icon, Modal, Notice } from './components';
 export function Composer({
   draft,
   setDraft,
   exercises,
   onSaved,
+  onAddExercise,
   onClose,
 }: {
   draft: Draft;
   setDraft: (d: Draft | null) => void;
   exercises: Exercise[];
   onSaved: (row: Workout, recovered?: boolean) => void;
+  onAddExercise: () => void;
   onClose: () => void;
 }) {
   const [last, setLast] = useState<Workout | null>(null),
@@ -250,6 +252,13 @@ export function Composer({
               </small>
             )}
           </label>
+          <button
+            type="button"
+            className="text-button exercise-create-action"
+            onClick={onAddExercise}
+          >
+            <Icon name="plus" /> Add new exercise
+          </button>
           {chosen?.status === 'pending' && (
             <p className="fine accent">
               Your pending exercise stays private until approval.

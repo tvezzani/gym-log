@@ -31,3 +31,7 @@ Drafts are held only in the running page. Reload/browser restart can lose them; 
 ## First-run setup follow-up
 
 The browser now checks installation state before choosing setup or login. A real Chromium/PostgreSQL scenario starts with an empty installation, validates password confirmation, creates an admin using a chosen password/timezone, handles a stale second setup page, logs in without an unnecessary second password change, and reloads into the log. Existing temporary-password tests remain passing. API tests verify concurrent setup, persistent completion, origin/CSRF/throttling, migration backfill and read-only runtime access to installation state. `AUTH.md` is the setup/recovery reference.
+
+## Add-exercise feedback
+
+Add new exercise is available beside Your sets and beneath the set form's exercise picker. A named submission uses the existing API and is immediately selected as an own pending exercise. It remains private until admin approval. Browser/PostgreSQL checks verify trimming/validation, persistence across reload, immediate private logging, no inclusion in the shared catalog, and retention of set fields through cancellation, server errors and reauthentication. Repeated submit events produce one exercise request. Full submission status/review screens remain later work.

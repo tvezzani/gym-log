@@ -881,3 +881,26 @@ h2 {
 .setup-zone {
   margin-top: 22px;
 }
+
+.section-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.section-actions .text-button {
+  font-size: 11px;
+  padding-right: 0;
+}
+.exercise-create-action {
+  margin: -12px 0 12px;
+  padding-left: 0;
+}
+.add-exercise-form {
+  padding: 22px;
+}
+.add-exercise-form > .fine {
+  margin-bottom: 24px;
+}
+.add-exercise-form > .primary {
+  margin-top: 8px;
+}
