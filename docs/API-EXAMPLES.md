@@ -96,3 +96,7 @@ For a semantic validation error, return 422:
 ```
 
 Do not echo invalid passwords, session values, or other submitted data in errors. See `API-RULES.md` for eligibility, pagination, locking, retry normalization and SQL conversion details.
+
+## Delete an unused exercise (milestone 6)
+
+An authenticated admin sends `DELETE /api/v1/exercises/6a12f9bc-832a-46a4-9d16-27bc47baab11` with the usual CSRF header. This returns 204 only when no workout or planned entry uses that exercise, regardless of record owner. Referenced exercises return 409 (`CONFLICT`, “Exercise is used by workouts or plans; archive it instead”). Archive with `PATCH` and `{"isArchived":true}` instead. Ordinary users receive 403; an unknown ID receives 404.

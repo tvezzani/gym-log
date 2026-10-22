@@ -50,11 +50,11 @@ Complete one small, usable stage at a time. Checked items describe completed wor
 - [x] Label all weights in pounds; implement copy prefills and last-value display.
 - [x] Preserve unsaved values on failed requests; show explicit save status.
 - [x] Build history filtering and set edit/delete.
-- [ ] Build calendar-date plans with notes, ordering, and a Log set shortcut; verify dates do not shift with timezones.
-- [ ] Add minimal password/settings and account administration screens.
-- [ ] Add exercise submission/status and admin approval controls.
+- [x] Build calendar-date plans with notes, ordering, and a Log set shortcut; verify dates do not shift with timezones.
+- [x] Add minimal password/settings and account administration screens.
+- [x] Add exercise submission/status and admin approval controls.
 - [ ] Check touch targets, labels, keyboard behavior, and layout on the actual phone.
-- [ ] Run one full flow: admin creates family account → user logs in → saves set → reloads → sees history.
+- [x] Run the full flow in Chromium/API/PostgreSQL: admin creates family account → user logs in → saves set → reloads → sees history. Actual phone checks remain open above.
 
 ## 4. Run it on Ubuntu
 
@@ -105,3 +105,13 @@ Complete one small, usable stage at a time. Checked items describe completed wor
 - [x] Verify signed CSRF/origin checks, validation, throttling and serialized competing requests.
 - [x] Verify durable completion, legacy admin backfill and runtime denial of setup-marker resets.
 - [x] Verify browser form validation, stale-page recovery, login and reload through real API/PostgreSQL.
+
+## Milestone 6 verification
+
+- [x] Verify plan CRUD, full-date reorder, current-time Log set prefills and literal-date persistence through timezone changes/reload.
+- [x] Verify timezone preferences, own exercise statuses, and retention of plan forms through reauthentication and uncertain creates.
+- [x] Verify the full admin/family/second-user approval flow in real Chromium/PostgreSQL; exercises are shared while sets/plans remain private.
+- [x] Verify account creation, last-admin protection, disable/enable, reset, forced password changes and role-change session revocation through the browser.
+- [x] Verify admin rename/archive/reject, historical references and deletion only when neither sets nor plans reference the exercise, including concurrent API writes.
+- [x] Check loading/empty/validation/server-failure recovery and inspect responsive screenshots; see `MANAGEMENT-GATE.md`.
+- [ ] Complete actual family-device keyboard/touch checks and deployment/recovery verification in the following milestones.

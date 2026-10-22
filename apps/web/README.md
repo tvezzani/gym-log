@@ -26,7 +26,10 @@ For a different web origin, set `WEB_ORIGIN` for `dev:api` and adjust Vite's hos
 - Editable backdated instants, milliseconds, DST-aware day bounds, rejected nonexistent local times and an occurrence selector for repeated clock times.
 - In-memory draft recovery across navigation and reauthentication. One frozen create UUID/payload survives uncertain responses and further retry failures. Resolve it through the same POST or by reading the current saved record before editing another submission. Deletion is acknowledged explicitly; retries cannot resurrect it.
 - Native modal focus management, labeled inputs, suitable input modes, touch targets, visual-viewport-aware scrolling and sticky Save controls.
-- Read-only display of today's existing plans with Log set prefills. Plan editing, timezone preferences, exercise status/review and account administration screens belong to milestone 6.
+- Plan date selection, notes, create/edit/delete and full-date ordering; today's plans appear on Today. Log set prefills the exercise and current time without parsing notes or saving automatically.
+- Settings with explicit stored-timezone changes and My exercises with own submission statuses. Plan dates remain literal dates; existing set drafts keep the timezone in which they were entered.
+- Admin account creation, enable/disable, role changes and temporary-password resets; catalog approval/rejection, rename, archive/unarchive and guarded permanent deletion of unused exercises. All accounts keep private workout/plan history.
+- Management forms survive navigation and reauthentication in memory. An uncertain plan create locks fields and requires reviewing the plan date before starting another entry.
 
 There is no offline queue or local storage of workouts/passwords. Drafts survive within the running page, not reloads or browser restarts. A best-effort unload prompt protects an unsaved draft. Reauthentication is restricted to the draft owner's username until that draft is resolved/discarded; logging out is blocked while a draft exists.
 
@@ -40,6 +43,6 @@ sudo env PATH="$PATH" node node_modules/playwright/cli.js install-deps chromium
 npm run test:web
 ```
 
-The browser test creates and removes a disposable PostgreSQL database, starts the actual API and Vite preview of the built assets, and drives Chromium with cookie sessions at a mobile viewport. It verifies persisted CRUD, copied/default sets, precise weights, forced-password flows, uncertain saves, reauthentication, eligibility changes, backdated timezone filtering and responsive modal behavior. Screenshots are written to ignored `apps/web/test-results/`.
+The browser test creates and removes a disposable PostgreSQL database, starts the actual API and Vite preview of the built assets, and drives Chromium with cookie sessions at a mobile viewport. It verifies persisted CRUD, copied/default sets, precise weights, forced-password flows, uncertain saves, reauthentication, eligibility changes, backdated timezone filtering and responsive modal behavior. The management browser suite additionally verifies plan CRUD/order/date stability, timezone preferences, two-user privacy, the admin approval flow, account revocation/reset/roles and guarded exercise deletion. Screenshots are written to ignored `apps/web/test-results/`.
 
-`npm run build` typechecks and builds the web bundle in `apps/web/dist`, as well as the API/contracts. Production same-origin hosting is still part of the deployment milestone; `npm start` currently starts the API only. Browser emulation does not complete the actual phone/browser, numeric-keyboard, Tailscale or production verification. See `docs/FRONTEND-GATE.md`.
+`npm run build` typechecks and builds the web bundle in `apps/web/dist`, as well as the API/contracts. Production same-origin hosting is still part of the deployment milestone; `npm start` currently starts the API only. Browser emulation does not complete the actual phone/browser, numeric-keyboard, Tailscale or production verification. See `docs/FRONTEND-GATE.md` and `docs/MANAGEMENT-GATE.md`.

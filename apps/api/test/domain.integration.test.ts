@@ -552,7 +552,7 @@ test(
             ).body.items.some((row: { id: string }) => row.id === shared.id),
           );
           await write(admin, 'delete', `/api/v1/exercises/${shared.id}`).expect(
-            404,
+            409,
           );
           await write(admin, 'patch', `/api/v1/exercises/${shared.id}`)
             .send({ isArchived: false, name: 'Barbell back squat' })
@@ -563,6 +563,60 @@ test(
           await write(alice, 'patch', `/api/v1/workouts/${saved.id}`)
             .send({ exerciseId: rejected.id })
             .expect(409);
+        },
+      );
+      await t.test(
+        'only admins can delete unused exercises; references and concurrent saves are protected',
+        async () => {
+          const unused = await submit(alice, 'Unused deletion');
+          await write(alice, 'delete', `/api/v1/exercises/${unused.id}`).expect(
+            403,
+          );
+          await write(admin, 'delete', `/api/v1/exercises/${unused.id}`).expect(
+            204,
+          );
+          await write(admin, 'delete', `/api/v1/exercises/${unused.id}`).expect(
+            404,
+          );
+          const referenced = await submit(alice, 'Referenced deletion'),
+            entry = await plan(alice, referenced.id, '2033-01-01');
+          await write(
+            admin,
+            'delete',
+            `/api/v1/exercises/${referenced.id}`,
+          ).expect(409);
+          const set = await save(alice, input(referenced.id));
+          await write(
+            alice,
+            'delete',
+            `/api/v1/planned-exercises/${entry.id}`,
+          ).expect(204);
+          await write(
+            admin,
+            'delete',
+            `/api/v1/exercises/${referenced.id}`,
+          ).expect(409);
+          await write(alice, 'delete', `/api/v1/workouts/${set.id}`).expect(
+            204,
+          );
+          await write(
+            admin,
+            'delete',
+            `/api/v1/exercises/${referenced.id}`,
+          ).expect(204);
+          for (let n = 0; n < 4; n++) {
+            const candidate = await submit(alice, `Deletion race ${n}`);
+            const [creation, deletion] = await Promise.all([
+              write(alice, 'post', '/api/v1/workouts').send(
+                input(candidate.id),
+              ),
+              write(admin, 'delete', `/api/v1/exercises/${candidate.id}`),
+            ]);
+            assert.ok(
+              (creation.status === 201 && deletion.status === 409) ||
+                (creation.status === 404 && deletion.status === 204),
+            );
+          }
         },
       );
       await t.test(

@@ -308,7 +308,20 @@ operation(
   {
     request: 'ExercisePatch',
     notes:
-      'Planned. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.',
+      'Planned. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. Unused exercises may be deleted through the admin-only DELETE endpoint; referenced exercises must be archived.',
+  },
+);
+operation(
+  'delete',
+  '/exercises/{id}',
+  'deleteExercise',
+  'Administration',
+  'Admin permanently deletes an unused exercise',
+  null,
+  {
+    status: 204,
+    notes:
+      'Implemented. Admin only. Lock the exercise and refuse deletion with 409 if any workout or planned entry references it, including another owner’s private records. No reference counts or owner details are exposed. Existing foreign keys and eligibility row locks protect concurrent saves. Archive referenced exercises instead.',
   },
 );
 operation(

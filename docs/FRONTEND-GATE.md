@@ -23,7 +23,7 @@ Unit checks separately verify 23/25-hour day bounds, midnight/date boundaries, e
 ## Remaining verification and scope
 
 - Test on the actual family phone/browser: number/decimal keyboards, visual viewport changes, touch behavior, Save reachability, and a full gym logging sequence. A reduced desktop viewport is not proof of an actual software keyboard's behavior.
-- Milestone 6: editable plans, timezone settings, exercise submission/status and admin catalog/account screens. Today's existing plans can already prefill an explicit set save.
+- Milestone 6 screens are implemented and verified separately in `MANAGEMENT-GATE.md`: editable plans, timezone settings, exercise submission/status and admin catalog/account controls.
 - Milestone 7: same-origin production assets, HTTPS/Tailscale, server access, restart behavior, backups and restore.
 
 Drafts are held only in the running page. Reload/browser restart can lose them; there is no offline persistence or synchronization. Uncertain creates remain immutable until reconciled, including through reauthentication.
@@ -34,4 +34,4 @@ The browser now checks installation state before choosing setup or login. A real
 
 ## Add-exercise feedback
 
-Add new exercise is available beside Your sets and beneath the set form's exercise picker. A named submission uses the existing API and is immediately selected as an own pending exercise. It remains private until admin approval. Browser/PostgreSQL checks verify trimming/validation, persistence across reload, immediate private logging, no inclusion in the shared catalog, and retention of set fields through cancellation, server errors and reauthentication. Repeated submit events produce one exercise request. Full submission status/review screens remain later work.
+Add new exercise is available beside Your sets and beneath the set form's exercise picker. A named submission uses the existing API and is immediately selected as an own pending exercise. It remains private until admin approval. Browser/PostgreSQL checks verify trimming/validation, persistence across reload, immediate private logging, no inclusion in the shared catalog, and retention of set fields through cancellation, server errors and reauthentication. Repeated submit events produce one exercise request. Full submission status/review screens are implemented in milestone 6; see `MANAGEMENT-GATE.md`.

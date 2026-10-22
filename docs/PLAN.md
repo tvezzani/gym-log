@@ -127,7 +127,7 @@ Scope record queries and mutations by authenticated owner, including admin reque
 - Add Plan with date selection, exercise/notes display such as `Barbell squats [3x10]`, create/edit/delete, and ordering.
 - Display today's plans on Today. Log set from a plan preselects the exercise; it does not interpret notes or create a set until saved.
 - Add own password/timezone controls and exercise submission/status. Handle rejected/archived references visibly using the adopted rules.
-- Add admin account create/disable/reset controls and exercise approval/rejection/rename/archive controls. Do not provide history browsing for other users.
+- Add admin account create/disable/reset controls and exercise approval/rejection/rename/archive controls. Allow admin deletion only if no workout or plan references the exercise. Do not provide history browsing for other users.
 - Check loading, empty, validation, expired-session, and server-failure states across screens, with keyboard-accessible forms and controls.
 
 **Exit check:** admin creates a family account → user logs in → submits an exercise → logs privately while pending → admin approves → another user sees the exercise but cannot see the first user's sets. Verify plan dates survive reload/timezone changes and all account controls enforce API rules.
@@ -184,4 +184,10 @@ The real PostgreSQL API gate passes the ownership, exercise lifecycle, duplicate
 
 The core phone frontend now uses React/Vite and custom SCSS, following the supplied screenshot's charcoal/yellow visual direction. Login/forced password change, Today, calendar history, exact decimal set entry, last values, copy, editing, deletion and safe in-memory recovery after uncertain saves are implemented. `FRONTEND-GATE.md` records real Chromium/API/PostgreSQL verification and known limits. No production hosting or real family account was added.
 
-The implementation and browser gate are complete; the milestone's actual-phone keyboard/touch verification remains open. Milestone 6 is the next implementation step: plans, timezone preferences, exercise submission/review and account administration screens.
+The implementation and browser gate are complete; the milestone's actual-phone keyboard/touch verification remains open. Milestone 6 completes plans, timezone preferences, exercise submission/review and account administration screens below.
+
+## Milestone 6 implementation — October 22, 2026
+
+Plan date selection, CRUD, notes and ordering are implemented. Today displays its plans, and Log set prefills an explicit new set at the current time. Settings stores an IANA timezone without shifting literal plan dates; My exercises shows private pending, shared approved, rejected and archived statuses. Admin screens create/manage accounts, reset passwords, change roles, review submissions, rename/archive definitions and delete unused definitions. Deletion is blocked by either workout or plan references across all owners. Existing database locks/foreign keys cover deletion without a migration.
+
+`MANAGEMENT-GATE.md` records the real-browser/API/PostgreSQL family workflow, failure recovery, session revocation, privacy and deletion checks. Forms retain in-memory values during navigation and reauthentication; an uncertain new-plan save locks and asks the user to review the selected date instead of silently posting a duplicate. No real family account or production deployment was created. Actual-phone verification remains open; the next implementation milestone is private deployment and tested recovery.

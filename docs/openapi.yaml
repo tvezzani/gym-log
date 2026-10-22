@@ -1110,7 +1110,7 @@ paths:
       tags:
         - Administration
       summary: Admin-only rename or archive/unarchive
-      description: Implemented. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. No exercise deletion endpoint.
+      description: Implemented. Only admin may rename any exercise. IDs and all historical references survive name/status changes. isArchived=true records server time; false clears archival. Unused exercises may be deleted through the admin-only DELETE endpoint; referenced exercises must be archived.
       security:
         - session: []
           csrf: []
@@ -1239,6 +1239,127 @@ paths:
               $ref: '#/components/schemas/ExercisePatch'
             example:
               name: Barbell back squat
+    delete:
+      operationId: deleteExercise
+      tags:
+        - Administration
+      summary: Admin permanently deletes an unused exercise
+      description: Implemented. Admin only. Lock the exercise and refuse deletion with 409 if any workout or planned entry references it, including another owner’s private records. No reference counts or owner details are exposed. Existing foreign keys and eligibility row locks protect concurrent saves. Archive referenced exercises instead.
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204':
+          description: Success; no response body
+        '400':
+          description: Malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INVALID_JSON
+                  message: Malformed JSON
+        '401':
+          description: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Missing, expired, revoked, or invalid session; disabled accounts cannot authenticate
+        '403':
+          description: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Role/CSRF/origin denial, or PASSWORD_CHANGE_REQUIRED until the password is changed
+        '404':
+          description: Unknown or inaccessible resource; do not disclose another owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Unknown or inaccessible resource; do not disclose another owner
+        '409':
+          description: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: State conflict; includes last active admin protection, exercise eligibility, or retry-ID conflict
+        '413':
+          description: Request body exceeds 32 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: BODY_TOO_LARGE
+                  message: Request body exceeds 32 KiB
+        '415':
+          description: Unsupported request encoding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: UNSUPPORTED_ENCODING
+                  message: Unsupported request encoding
+        '422':
+          description: Runtime validation failed; fieldErrors contain paths and messages, never input values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example: *a2
+        '500':
+          description: Unexpected failure; no internal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected failure; no internal details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Resource UUID; private resources are looked up within the authenticated owner
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
+          description: Token obtained from /auth/csrf or authenticated login response; tied to the cookie context
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must exactly match configured APP_ORIGIN. Required for browser and CLI API mutations.
   /admin/exercises:
     get:
       operationId: reviewQueue

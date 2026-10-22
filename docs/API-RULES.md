@@ -12,6 +12,8 @@ Names need not be unique. Approval keeps the ID stable and shares only the exerc
 
 For a new selection, use `SELECT ... FOR SHARE` on the selected exercise within the write transaction, recheck eligibility, and retain the lock through commit. Review, rename and archive acquire `FOR UPDATE` on that row. An existing-reference edit locks/checks the owned set/plan as well. This prevents archive/review races from bypassing eligibility. Handle deadlocks by rolling back/retrying the whole transaction with bounded retries; never continue a failed transaction.
 
+Admins may permanently delete an exercise with `DELETE /exercises/:id` only when no workout or planned entry from any account references it. The transaction locks the exercise row, checks both reference tables, then deletes; reference writers share-lock the same row and foreign keys remain restrictive. Referenced definitions return 409 and must be archived instead. An unused definition returns 204; an absent ID returns 404. A deleted set’s retry ledger retains no exercise foreign key and cannot resurrect the set.
+
 ## Validation, numbers and time
 
 All defined request-body and query schemas are strict: unknown fields fail validation, and empty PATCH objects fail. Semantic validation returns 422 with `error.code=VALIDATION_ERROR` and optional `fieldErrors` (path/message only). Malformed JSON returns 400, oversized bodies 413, unsupported encoding 415, expired/disabled/revoked authentication 401, role/CSRF denial 403, inaccessible resources 404, and state conflicts 409. Error responses never include raw input, SQL, stack traces, hashes, or credentials. JSON bodies are limited to 32 KiB.
@@ -47,7 +49,7 @@ List requests accept `limit=1..100` (default 50), `offset=0..100000` (default 0)
 
 All plan create/delete/move/reorder operations acquire the same transaction advisory lock derived from the authenticated owner and calendar date. Moving dates locks both keys in deterministic order. Append new/moved entries after the existing last position, with at most 500 entries per owner/date. The bound is an API transaction rule, not a SQL CHECK across rows.
 
-`PUT /planned-exercises/order` supplies every ID currently on that owned date exactly once. Under the common lock, compare the full membership, defer `app.plans_owner_date_order`, update all positions to 0..n-1, and commit. Foreign IDs, omitted IDs, duplicates, or stale membership fail without partial updates. Existing gaps after deletion do not matter. Reorder never changes exercise references or generates workouts. Logging from a plan is a later UI prefill action only.
+`PUT /planned-exercises/order` supplies every ID currently on that owned date exactly once. Under the common lock, compare the full membership, defer `app.plans_owner_date_order`, update all positions to 0..n-1, and commit. Foreign IDs, omitted IDs, duplicates, or stale membership fail without partial updates. Existing gaps after deletion do not matter. Reorder never changes exercise references or generates workouts. Logging from a plan is a UI prefill action only, using the current time and requiring an explicit set save.
 
 ## Accounts and sessions
 

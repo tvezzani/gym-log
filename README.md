@@ -1,6 +1,6 @@
 # Gym Log
 
-A minimalist, self-hosted gym log for a family. Working title; the API and core phone logging frontend are implemented.
+A minimalist, self-hosted gym log for a family. Working title; the API, phone logging, plans/settings and admin frontend are implemented.
 
 Each workout record is one independent set. Version 1 requires a connection to the Ubuntu server through Tailscale.
 
@@ -31,7 +31,7 @@ docs/                  PRD, checklist, decisions
 infra/                 Deployment configuration and backup instructions
 ```
 
-The API foundation is runnable. The milestone 2 API contract and domain migrations are in place. Authentication, account administration and own preferences are implemented. Exercise/set/plan endpoints are implemented in milestone 4; the core phone frontend is implemented in milestone 5. Node 24.22.1 LTS, TypeScript, Express 5, `pg`, Zod, and node-pg-migrate are pinned through package manifests and `package-lock.json`. PostgreSQL 17 uses an immutable image digest in the development Compose file.
+The API foundation is runnable. The milestone 2 API contract and domain migrations are in place. Authentication, account administration and own preferences are implemented. Exercise/set/plan endpoints are implemented in milestone 4; the core phone frontend is implemented in milestone 5, with plans/settings and admin screens in milestone 6. Node 24.22.1 LTS, TypeScript, Express 5, `pg`, Zod, and node-pg-migrate are pinned through package manifests and `package-lock.json`. PostgreSQL 17 uses an immutable image digest in the development Compose file.
 
 ## Development in Ubuntu WSL
 
@@ -111,7 +111,7 @@ Configuration now requires a random `AUTH_SECRET` and exact `APP_ORIGIN`; `.env.
 
 Exercises, sets/history and private dated plans are implemented. `docs/API-GATE.md` records the passed milestone 4 API gate and its limits; run `npm run test:domain` for the focused real PostgreSQL scenarios, or `npm run test:db` for the full database/API suite. The tests create and remove disposable databases, leaving development history alone.
 
-The core phone logging frontend is implemented. `docs/FRONTEND-GATE.md` records browser verification, safe draft/retry recovery and the remaining actual-device check. The next implementation milestone is plans/settings and admin screens. Private deployment and backups remain later work. No real family login was created automatically.
+The core phone logging frontend is implemented. `docs/FRONTEND-GATE.md` records browser verification, safe draft/retry recovery and the remaining actual-device check. `docs/MANAGEMENT-GATE.md` records the plans/settings and admin workflow checks. The next implementation milestone is private deployment, backups and tested recovery. No real family login was created automatically.
 
 ## First-run admin setup
 

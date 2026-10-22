@@ -99,6 +99,39 @@ export function exerciseRouter(pool: Pool) {
     );
     res.json(result);
   });
+  router.delete('/exercises/:id', async (req, res) => {
+    const id = parse(idSchema, req.params.id).toLowerCase();
+    await run(
+      pool,
+      res,
+      async (db) => {
+        if (
+          !(
+            await db.query(
+              'SELECT id FROM app.exercises WHERE id=$1 FOR UPDATE',
+              [id],
+            )
+          ).rowCount
+        )
+          throw new HttpError(404, 'NOT_FOUND', 'Exercise not found');
+        const used = (
+          await db.query<{ used: boolean }>(
+            'SELECT EXISTS(SELECT 1 FROM app.workouts WHERE exercise_id=$1) OR EXISTS(SELECT 1 FROM app.planned_exercises WHERE exercise_id=$1) AS used',
+            [id],
+          )
+        ).rows[0]!;
+        if (used.used)
+          throw new HttpError(
+            409,
+            'CONFLICT',
+            'Exercise is used by workouts or plans; archive it instead',
+          );
+        await db.query('DELETE FROM app.exercises WHERE id=$1', [id]);
+      },
+      true,
+    );
+    res.sendStatus(204);
+  });
   for (const action of ['approve', 'reject'] as const)
     router.post(`/admin/exercises/:id/${action}`, async (req, res) => {
       const id = parse(idSchema, req.params.id).toLowerCase();

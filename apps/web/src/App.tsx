@@ -18,6 +18,10 @@ import { Login, PasswordChange } from './Auth';
 import { Brand, Icon, Modal, Notice } from './components';
 import { Calendar } from './Calendar';
 import { Composer } from './Composer';
+import { Plans } from './Plans';
+import { Settings, MyExercises } from './Settings';
+import { Accounts, Catalog } from './Administration';
+import { draftView, type ManagementDraft } from './management';
 import { AddExercise, type ExerciseDraft } from './AddExercise';
 import { type Draft, makeDraft } from './draft';
 import {
@@ -35,7 +39,16 @@ export function App() {
     [startupError, setStartupError] = useState(''),
     [loginNote, setLoginNote] = useState(''),
     [expected, setExpected] = useState('');
-  const [view, setView] = useState<'today' | 'history' | 'password'>('today'),
+  const [view, setView] = useState<
+      | 'today'
+      | 'history'
+      | 'password'
+      | 'plan'
+      | 'settings'
+      | 'exercises'
+      | 'accounts'
+      | 'catalog'
+    >('today'),
     [date, setDate] = useState(''),
     [today, setToday] = useState(''),
     [calendar, setCalendar] = useState(false),
@@ -62,7 +75,15 @@ export function App() {
     ),
     [exerciseOpen, setExerciseOpen] = useState(false),
     [returnToComposer, setReturnToComposer] = useState(false);
+  const [managementDraft, setManagementDraft] =
+    useState<ManagementDraft | null>(null);
   const acceptUser = useCallback((next: User) => {
+    if (next.role !== 'admin') {
+      setManagementDraft((d) =>
+        d && ['account', 'reset', 'rename'].includes(d.kind) ? null : d,
+      );
+      setView((v) => (v === 'accounts' || v === 'catalog' ? 'settings' : v));
+    }
     setRows([]);
     setPlans([]);
     setExercises([]);
@@ -164,7 +185,12 @@ export function App() {
     };
   }, [user?.id, user?.mustChangePassword, refresh]);
   useEffect(() => {
-    if (!user || user.mustChangePassword || !activeDate || view === 'password')
+    if (
+      !user ||
+      user.mustChangePassword ||
+      !activeDate ||
+      !['today', 'history'].includes(view)
+    )
       return;
     let live = true;
     setLoading(true);
@@ -214,14 +240,19 @@ export function App() {
     view,
   ]);
   useEffect(() => {
-    if (!draft && !exerciseDraft) return;
+    if (!draft && !exerciseDraft && !managementDraft) return;
     const prevent = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
     window.addEventListener('beforeunload', prevent);
     return () => window.removeEventListener('beforeunload', prevent);
-  }, [draft, exerciseDraft]);
-  function newDraft(source?: Workout, edit = false, exerciseId = '') {
+  }, [draft, exerciseDraft, managementDraft]);
+  function newDraft(
+    source?: Workout,
+    edit = false,
+    exerciseId = '',
+    performedDate = activeDate,
+  ) {
     if (!user) return;
     if (draft) {
       setComposer(true);
@@ -235,7 +266,7 @@ export function App() {
       makeDraft(
         user.id,
         user.timeZone,
-        source && !edit ? today : activeDate,
+        source && !edit ? today : performedDate,
         exerciseId,
         source,
         edit,
@@ -279,7 +310,12 @@ export function App() {
             error: '',
             fieldErrors: [],
           }
-        : makeDraft(user.id, user.timeZone, activeDate, exercise.id),
+        : makeDraft(
+            user.id,
+            user.timeZone,
+            view === 'today' || view === 'history' ? activeDate : today,
+            exercise.id,
+          ),
     );
     setComposer(true);
     setNotice(
@@ -341,7 +377,7 @@ export function App() {
     }
   }
   async function logout() {
-    if (draft || exerciseDraft) {
+    if (draft || exerciseDraft || managementDraft) {
       setNotice('Finish or discard your draft before logging out.');
       setMenu(false);
       return;
@@ -361,6 +397,15 @@ export function App() {
     } catch (e) {
       setNotice(message(e));
     }
+  }
+  function signedOut(note: string) {
+    api.csrf = '';
+    setUser(null);
+    setExpected(draft || exerciseDraft ? (user?.username ?? '') : '');
+    setManagementDraft(null);
+    setView('today');
+    setMenu(false);
+    setLoginNote(note);
   }
   if (starting)
     return (
@@ -395,7 +440,7 @@ export function App() {
     return (
       <Login
         key={expected}
-        expected={draft || exerciseDraft ? expected : ''}
+        expected={draft || exerciseDraft || managementDraft ? expected : ''}
         note={loginNote}
         onLogin={acceptUser}
       />
@@ -416,6 +461,24 @@ export function App() {
           : {})}
       />
     );
+  const isLogView = view === 'today' || view === 'history';
+  const managementProps = {
+    user,
+    draft: managementDraft,
+    onDraft: setManagementDraft,
+    revision: refresh,
+    onChanged: () => setRefresh((n) => n + 1),
+  };
+  const titles = {
+    today: 'Let’s put in the work.',
+    history: 'Every set counts.',
+    plan: 'Plan your next effort.',
+    settings: 'Make it work for you.',
+    exercises: 'Your exercise library.',
+    accounts: 'Family accounts.',
+    catalog: 'Review the catalog.',
+    password: 'Change password',
+  };
   const grouped = new Map<string, Workout[]>();
   for (const row of rows) {
     const group = grouped.get(row.exerciseId) ?? [];
@@ -468,6 +531,42 @@ export function App() {
           >
             Change password
           </button>
+          <button
+            onClick={() => {
+              setView('settings');
+              setMenu(false);
+            }}
+          >
+            Settings
+          </button>
+          <button
+            onClick={() => {
+              setView('exercises');
+              setMenu(false);
+            }}
+          >
+            My exercises
+          </button>
+          {user.role === 'admin' && (
+            <>
+              <button
+                onClick={() => {
+                  setView('accounts');
+                  setMenu(false);
+                }}
+              >
+                Manage accounts
+              </button>
+              <button
+                onClick={() => {
+                  setView('catalog');
+                  setMenu(false);
+                }}
+              >
+                Review exercises
+              </button>
+            </>
+          )}
           <button onClick={logout}>Log out</button>
           <p className="fine muted">
             Your sets and history stay private to your account.
@@ -481,9 +580,7 @@ export function App() {
               ? `WELCOME, ${user.username.toUpperCase()}`
               : 'YOUR WORK, RECORDED'}
           </p>
-          <h1>
-            {view === 'today' ? 'Let’s put in the work.' : 'Every set counts.'}
-          </h1>
+          <h1>{titles[view]}</h1>
         </div>
         <nav className="tabs" aria-label="Log views">
           <button
@@ -505,73 +602,59 @@ export function App() {
           >
             History
           </button>
+          <button
+            aria-current={view === 'plan' ? 'page' : undefined}
+            onClick={() => {
+              setView('plan');
+              setDate(today);
+            }}
+          >
+            Plan
+          </button>
+          <button
+            aria-current={view === 'settings' ? 'page' : undefined}
+            onClick={() => setView('settings')}
+          >
+            Settings
+          </button>
         </nav>
-        <div className="date-bar">
-          <button
-            className="icon-button accent"
-            aria-label="Previous day"
-            disabled={loadingMore || activeDate === '0001-01-01'}
-            onClick={() => {
-              setDate(shiftDate(activeDate, -1));
-              setView('history');
-            }}
-          >
-            <Icon name="back" />
-          </button>
-          <button
-            className="date-heading"
-            onClick={() => setCalendar(true)}
-            disabled={loadingMore}
-          >
-            {dateLabel(activeDate)}
-            <Icon name="calendar" />
-          </button>
-          <button
-            className="icon-button accent"
-            aria-label="Next day"
-            disabled={loadingMore || activeDate === '9999-12-31'}
-            onClick={() => {
-              setDate(shiftDate(activeDate, 1));
-              setView('history');
-            }}
-          >
-            <Icon name="next" />
-          </button>
-        </div>
-        <div className="log-meta">
-          <span className="fine muted">{user.timeZone}</span>
-          <button
-            className="text-button"
-            disabled={loading || loadingMore}
-            onClick={() => setRefresh((n) => n + 1)}
-          >
-            Refresh
-          </button>
-        </div>
-        {notice && <Notice>{notice}</Notice>}
-        {draft && (
+        {!isLogView && notice && <Notice>{notice}</Notice>}
+        {!isLogView && catalogError && (
+          <Notice error>
+            {catalogError}
+            <button
+              className="text-button"
+              onClick={() => setRefresh((n) => n + 1)}
+            >
+              Retry exercise list
+            </button>
+          </Notice>
+        )}
+        {managementDraft && (
           <div className="draft-banner">
             <div>
               <strong>
-                {draft.phase === 'editing'
-                  ? 'Unsaved set'
-                  : 'Save needs attention'}
+                Unsaved{' '}
+                {managementDraft.kind === 'plan' ? 'plan entry' : 'form'}
               </strong>
               <p className="fine muted">
-                {draft.phase === 'editing'
-                  ? 'Your values are kept while you browse.'
-                  : 'Resolve this save before starting another set.'}
+                Values stay here while you browse or log in again.
               </p>
             </div>
+            <button onClick={() => setView(draftView(managementDraft))}>
+              Resume form
+            </button>
+          </div>
+        )}
+        {!isLogView && draft && (
+          <div className="draft-banner">
+            <strong>Unsaved set</strong>
             <button onClick={() => setComposer(true)}>Resume</button>
             {draft.phase === 'editing' && (
               <button
-                className="text-button"
                 onClick={() => {
-                  if (window.confirm('Discard this unsaved set?')) {
+                  if (window.confirm('Discard this unsaved set?'))
                     setDraft(null);
-                    setComposer(false);
-                  }
                 }}
               >
                 Discard
@@ -579,65 +662,147 @@ export function App() {
             )}
           </div>
         )}
-        {exerciseDraft && !exerciseOpen && (
+        {!isLogView && exerciseDraft && !exerciseOpen && (
           <div className="draft-banner">
-            <div>
-              <strong>Unsaved exercise</strong>
-              <p className="fine muted">
-                Your exercise name is kept while you log in.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setComposer(false);
-                setExerciseOpen(true);
-              }}
-            >
+            <strong>Unsaved exercise</strong>
+            <button onClick={() => setExerciseOpen(true)}>
               Resume exercise
             </button>
           </div>
         )}
-        {catalogError && (
-          <Notice error>
-            Exercise list unavailable. {catalogError}{' '}
-            <button
-              className="text-button"
-              onClick={() => setRefresh((n) => n + 1)}
-            >
-              Retry
-            </button>
-          </Notice>
+        {view === 'plan' && (
+          <Plans
+            {...managementProps}
+            date={date}
+            onDate={setDate}
+            exercises={exercises}
+            onLog={(id) => newDraft(undefined, false, id, today)}
+            onAddExercise={() => openAddExercise()}
+          />
         )}
-        {view === 'history' && (
-          <label className="filter field">
-            <span>Exercise filter</span>
-            <select
-              value={filter}
-              disabled={loadingMore}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              <option value="">All exercises</option>
-              {filter && !options.some((o) => o.id === filter) && (
-                <option value={filter}>Selected historical exercise</option>
-              )}
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        {view === 'settings' && (
+          <Settings
+            {...managementProps}
+            onUser={(next) => {
+              setUser(next);
+              setToday(todayIn(next.timeZone));
+              setRefresh((n) => n + 1);
+              setNotice('Timezone saved. Plan dates are unchanged.');
+            }}
+            onPassword={() => setView('password')}
+            onExercises={() => setView('exercises')}
+          />
         )}
-        {loading ? (
-          <div className="loading" role="status">
-            <span className="loading-dot" />
-            Loading your sets…
-          </div>
-        ) : (
+        {view === 'exercises' && (
+          <MyExercises
+            user={user}
+            revision={refresh}
+            onAdd={() => openAddExercise()}
+            onLog={(id) => newDraft(undefined, false, id, today)}
+          />
+        )}
+        {view === 'accounts' && user.role === 'admin' && (
+          <Accounts {...managementProps} onSignedOut={signedOut} />
+        )}
+        {view === 'catalog' && user.role === 'admin' && (
+          <Catalog {...managementProps} />
+        )}
+        {isLogView && (
           <>
-            {loadError && (
+            <div className="date-bar">
+              <button
+                className="icon-button accent"
+                aria-label="Previous day"
+                disabled={loadingMore || activeDate === '0001-01-01'}
+                onClick={() => {
+                  setDate(shiftDate(activeDate, -1));
+                  setView('history');
+                }}
+              >
+                <Icon name="back" />
+              </button>
+              <button
+                className="date-heading"
+                onClick={() => setCalendar(true)}
+                disabled={loadingMore}
+              >
+                {dateLabel(activeDate)}
+                <Icon name="calendar" />
+              </button>
+              <button
+                className="icon-button accent"
+                aria-label="Next day"
+                disabled={loadingMore || activeDate === '9999-12-31'}
+                onClick={() => {
+                  setDate(shiftDate(activeDate, 1));
+                  setView('history');
+                }}
+              >
+                <Icon name="next" />
+              </button>
+            </div>
+            <div className="log-meta">
+              <span className="fine muted">{user.timeZone}</span>
+              <button
+                className="text-button"
+                disabled={loading || loadingMore}
+                onClick={() => setRefresh((n) => n + 1)}
+              >
+                Refresh
+              </button>
+            </div>
+            {notice && <Notice>{notice}</Notice>}
+            {draft && (
+              <div className="draft-banner">
+                <div>
+                  <strong>
+                    {draft.phase === 'editing'
+                      ? 'Unsaved set'
+                      : 'Save needs attention'}
+                  </strong>
+                  <p className="fine muted">
+                    {draft.phase === 'editing'
+                      ? 'Your values are kept while you browse.'
+                      : 'Resolve this save before starting another set.'}
+                  </p>
+                </div>
+                <button onClick={() => setComposer(true)}>Resume</button>
+                {draft.phase === 'editing' && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      if (window.confirm('Discard this unsaved set?')) {
+                        setDraft(null);
+                        setComposer(false);
+                      }
+                    }}
+                  >
+                    Discard
+                  </button>
+                )}
+              </div>
+            )}
+            {exerciseDraft && !exerciseOpen && (
+              <div className="draft-banner">
+                <div>
+                  <strong>Unsaved exercise</strong>
+                  <p className="fine muted">
+                    Your exercise name is kept while you log in.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setComposer(false);
+                    setExerciseOpen(true);
+                  }}
+                >
+                  Resume exercise
+                </button>
+              </div>
+            )}
+            {catalogError && (
               <Notice error>
-                {loadError}{' '}
+                Exercise list unavailable. {catalogError}{' '}
                 <button
                   className="text-button"
                   onClick={() => setRefresh((n) => n + 1)}
@@ -646,161 +811,210 @@ export function App() {
                 </button>
               </Notice>
             )}
-            {plans.length > 0 && (
-              <section className="planned">
-                <p className="eyebrow">
-                  <span className="dot" />
-                  ON YOUR PLAN
-                </p>
-                {plans.map((p) => (
-                  <div key={p.id}>
-                    <div>
-                      <strong>{p.exercise.name}</strong>
-                      {p.notes && <p className="fine muted">{p.notes}</p>}
-                    </div>
-                    <button
-                      className="text-button"
-                      disabled={!exercises.some((e) => e.id === p.exerciseId)}
-                      onClick={() => newDraft(undefined, false, p.exerciseId)}
-                    >
-                      Log set <span aria-hidden="true">↗</span>
-                    </button>
-                  </div>
-                ))}
-              </section>
-            )}
-            <div className="section-label">
-              <h2>{view === 'today' ? 'Your sets' : 'Logged sets'}</h2>
-              <div className="section-actions">
-                <span className="count">
-                  {rows.length}
-                  {hasMore ? '+' : ''}
-                </span>
-                <button
-                  className="text-button"
-                  onClick={() => openAddExercise()}
-                  disabled={!!draft && draft.phase !== 'editing'}
+            {view === 'history' && (
+              <label className="filter field">
+                <span>Exercise filter</span>
+                <select
+                  value={filter}
+                  disabled={loadingMore}
+                  onChange={(e) => setFilter(e.target.value)}
                 >
-                  <Icon name="plus" /> Add new exercise
-                </button>
+                  <option value="">All exercises</option>
+                  {filter && !options.some((o) => o.id === filter) && (
+                    <option value={filter}>Selected historical exercise</option>
+                  )}
+                  {options.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {loading ? (
+              <div className="loading" role="status">
+                <span className="loading-dot" />
+                Loading your sets…
               </div>
-            </div>
-            {!rows.length && !loadError ? (
-              <section className="empty">
-                <div className="empty-mark" aria-hidden="true">
-                  <Icon name="plus" />
-                </div>
-                <h2>
-                  {view === 'today' ? 'Start with one set.' : 'A clean page.'}
-                </h2>
-                <p>
-                  {view === 'today'
-                    ? 'Pick an exercise. Log your effort. Build from there.'
-                    : 'No sets recorded for this date and filter. You can add a backdated set here.'}
-                </p>
-                <button className="primary" onClick={() => newDraft()}>
-                  Log a set <Icon name="plus" />
-                </button>
-                {!exercises.length && !catalogError && (
-                  <p className="fine muted">
-                    Add a new exercise to start logging. You can use it
-                    privately while it awaits approval.
-                  </p>
-                )}
-              </section>
-            ) : null}
-            {[...grouped].map(([id, group]) => {
-              const exercise = group[0]!.exercise;
-              return (
-                <details className="exercise-group" key={id} open>
-                  <summary>
-                    <span>
-                      {exercise.name}
-                      {(exercise.status !== 'approved' ||
-                        exercise.archivedAt) && (
-                        <small className="exercise-status">
-                          {exercise.archivedAt
-                            ? 'Archived'
-                            : exercise.status === 'pending'
-                              ? 'Pending · private'
-                              : 'Rejected'}
-                        </small>
-                      )}
-                    </span>
-                    <span className="group-count">
-                      {group.length} {group.length === 1 ? 'set' : 'sets'}
-                    </span>
-                    <span className="chevron" aria-hidden="true" />
-                  </summary>
-                  <div role="group" aria-label={`${exercise.name} sets`}>
-                    <div
-                      className="set-columns column-labels"
-                      aria-hidden="true"
+            ) : (
+              <>
+                {loadError && (
+                  <Notice error>
+                    {loadError}{' '}
+                    <button
+                      className="text-button"
+                      onClick={() => setRefresh((n) => n + 1)}
                     >
-                      <span>lbs</span>
-                      <span>reps</span>
-                      <span className="accent">set</span>
-                      <span>RPE</span>
-                      <span />
-                    </div>
-                    {group.map((row) => (
-                      <button
-                        className="set-columns set-row"
-                        key={row.id}
-                        aria-label={`Set ${row.setNumber}, ${row.weight} pounds, ${row.reps} reps, RPE ${row.rpe}`}
-                        onClick={() => {
-                          setSelected(row);
-                          setConfirmDelete(false);
-                          setActionError('');
-                        }}
-                      >
-                        <strong>{row.weight}</strong>
-                        <span>{row.reps}</span>
-                        <span className="accent">{row.setNumber}</span>
-                        <span>{row.rpe}</span>
-                        <span className="row-more" aria-hidden="true">
-                          ···
-                        </span>
-                      </button>
+                      Retry
+                    </button>
+                  </Notice>
+                )}
+                {plans.length > 0 && (
+                  <section className="planned">
+                    <p className="eyebrow">
+                      <span className="dot" />
+                      ON YOUR PLAN
+                    </p>
+                    {plans.map((p) => (
+                      <div key={p.id}>
+                        <div>
+                          <strong>{p.exercise.name}</strong>
+                          {p.notes && <p className="fine muted">{p.notes}</p>}
+                        </div>
+                        <button
+                          className="text-button"
+                          disabled={
+                            !exercises.some((e) => e.id === p.exerciseId)
+                          }
+                          onClick={() =>
+                            newDraft(undefined, false, p.exerciseId)
+                          }
+                        >
+                          Log set <span aria-hidden="true">↗</span>
+                        </button>
+                      </div>
                     ))}
-                  </div>
-                  <div className="group-footer">
-                    <span className="fine muted">
-                      Latest · {timeLabel(group[0]!.performedAt, user.timeZone)}
+                  </section>
+                )}
+                <div className="section-label">
+                  <h2>{view === 'today' ? 'Your sets' : 'Logged sets'}</h2>
+                  <div className="section-actions">
+                    <span className="count">
+                      {rows.length}
+                      {hasMore ? '+' : ''}
                     </span>
                     <button
                       className="text-button"
-                      disabled={!exercises.some((e) => e.id === id)}
-                      onClick={() => newDraft(undefined, false, id)}
+                      onClick={() => openAddExercise()}
+                      disabled={!!draft && draft.phase !== 'editing'}
                     >
-                      <Icon name="plus" /> Add set
+                      <Icon name="plus" /> Add new exercise
                     </button>
                   </div>
-                </details>
-              );
-            })}
-            {hasMore && (
-              <button
-                className="secondary wide"
-                disabled={loadingMore}
-                onClick={more}
-              >
-                {loadingMore ? 'Loading…' : 'Load more sets'}
-              </button>
+                </div>
+                {!rows.length && !loadError ? (
+                  <section className="empty">
+                    <div className="empty-mark" aria-hidden="true">
+                      <Icon name="plus" />
+                    </div>
+                    <h2>
+                      {view === 'today'
+                        ? 'Start with one set.'
+                        : 'A clean page.'}
+                    </h2>
+                    <p>
+                      {view === 'today'
+                        ? 'Pick an exercise. Log your effort. Build from there.'
+                        : 'No sets recorded for this date and filter. You can add a backdated set here.'}
+                    </p>
+                    <button className="primary" onClick={() => newDraft()}>
+                      Log a set <Icon name="plus" />
+                    </button>
+                    {!exercises.length && !catalogError && (
+                      <p className="fine muted">
+                        Add a new exercise to start logging. You can use it
+                        privately while it awaits approval.
+                      </p>
+                    )}
+                  </section>
+                ) : null}
+                {[...grouped].map(([id, group]) => {
+                  const exercise = group[0]!.exercise;
+                  return (
+                    <details className="exercise-group" key={id} open>
+                      <summary>
+                        <span>
+                          {exercise.name}
+                          {(exercise.status !== 'approved' ||
+                            exercise.archivedAt) && (
+                            <small className="exercise-status">
+                              {exercise.archivedAt
+                                ? 'Archived'
+                                : exercise.status === 'pending'
+                                  ? 'Pending · private'
+                                  : 'Rejected'}
+                            </small>
+                          )}
+                        </span>
+                        <span className="group-count">
+                          {group.length} {group.length === 1 ? 'set' : 'sets'}
+                        </span>
+                        <span className="chevron" aria-hidden="true" />
+                      </summary>
+                      <div role="group" aria-label={`${exercise.name} sets`}>
+                        <div
+                          className="set-columns column-labels"
+                          aria-hidden="true"
+                        >
+                          <span>lbs</span>
+                          <span>reps</span>
+                          <span className="accent">set</span>
+                          <span>RPE</span>
+                          <span />
+                        </div>
+                        {group.map((row) => (
+                          <button
+                            className="set-columns set-row"
+                            key={row.id}
+                            aria-label={`Set ${row.setNumber}, ${row.weight} pounds, ${row.reps} reps, RPE ${row.rpe}`}
+                            onClick={() => {
+                              setSelected(row);
+                              setConfirmDelete(false);
+                              setActionError('');
+                            }}
+                          >
+                            <strong>{row.weight}</strong>
+                            <span>{row.reps}</span>
+                            <span className="accent">{row.setNumber}</span>
+                            <span>{row.rpe}</span>
+                            <span className="row-more" aria-hidden="true">
+                              ···
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="group-footer">
+                        <span className="fine muted">
+                          Latest ·{' '}
+                          {timeLabel(group[0]!.performedAt, user.timeZone)}
+                        </span>
+                        <button
+                          className="text-button"
+                          disabled={!exercises.some((e) => e.id === id)}
+                          onClick={() => newDraft(undefined, false, id)}
+                        >
+                          <Icon name="plus" /> Add set
+                        </button>
+                      </div>
+                    </details>
+                  );
+                })}
+                {hasMore && (
+                  <button
+                    className="secondary wide"
+                    disabled={loadingMore}
+                    onClick={more}
+                  >
+                    {loadingMore ? 'Loading…' : 'Load more sets'}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
         <p className="end-note">One set at a time.</p>
       </main>
-      <div className="floating-add">
-        <button
-          className="fab"
-          aria-label={draft ? 'Resume unsaved set' : 'Log a set'}
-          onClick={() => (draft ? setComposer(true) : newDraft())}
-        >
-          <Icon name="plus" />
-        </button>
-      </div>
+      {isLogView && (
+        <div className="floating-add">
+          <button
+            className="fab"
+            aria-label={draft ? 'Resume unsaved set' : 'Log a set'}
+            onClick={() => (draft ? setComposer(true) : newDraft())}
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
+      )}
       {calendar && (
         <Calendar
           value={activeDate}

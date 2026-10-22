@@ -35,7 +35,7 @@
     "test:domain": "npm run build -w @gym-log/contracts && node --env-file=.env --import tsx --test apps/api/test/domain.integration.test.ts",
     "dev:api": "npm run build -w @gym-log/contracts && node --env-file=.env --import tsx --watch scripts/dev-api.mjs",
     "dev:web": "npm run dev -w @gym-log/web",
-    "test:web": "npm run build -w @gym-log/contracts && npm run build -w @gym-log/web && node --env-file=.env --import tsx --test --test-concurrency=1 apps/web/test/browser.integration.ts apps/web/test/setup.integration.ts"
+    "test:web": "npm run build -w @gym-log/contracts && npm run build -w @gym-log/web && node --env-file=.env --import tsx --test --test-concurrency=1 apps/web/test/browser.integration.ts apps/web/test/setup.integration.ts apps/web/test/management.integration.ts"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "13.1.0",

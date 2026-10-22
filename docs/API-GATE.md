@@ -41,3 +41,7 @@ All domain handlers run behind the session, forced-password-change, same-origin 
 Every plan mutation takes the shared owner/date advisory lock; moves acquire both date keys in sorted order. Reorder validates full owner/date membership and defers the per-date position constraint only inside its transaction. Offset pagination does not promise a snapshot across concurrent changes, as documented in API-RULES.md.
 
 The gate is satisfied for starting milestone 5: the core phone logging frontend. Browser/phone UX, uncertain-save form recovery, real-device testing, private deployment, backups and a real gym visit remain later milestones. No frontend or production deployment is included here.
+
+## Milestone 6 extension
+
+The admin-only unused-exercise DELETE endpoint is verified with real PostgreSQL: ordinary users are denied, missing IDs return 404, either workout or plan references block deletion with 409, removing all references permits 204, and concurrent new-set/deletion requests cannot leave a dangling reference. Existing restrictive foreign keys and exercise row locks cover this without another migration. The milestone 6 browser flow also checks blocked and successful deletion.
